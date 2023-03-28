@@ -56,6 +56,7 @@ sqlite3_wal_checkpoint
 sqlite3_wal_checkpoint_v2
 sqlite3_wal_hook
 sqlite3_normalized_sql
+sqlite3_test_control
 
 -- Imported --
 sqlite3_os_end
@@ -256,7 +257,6 @@ sqlite3_strlike
 sqlite3_strnicmp
 sqlite3_system_errno
 sqlite3_table_column_metadata
-sqlite3_test_control
 sqlite3_threadsafe
 sqlite3_total_changes
 sqlite3_total_changes64

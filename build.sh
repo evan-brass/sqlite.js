@@ -209,7 +209,6 @@ wasi-sdk-19.0/bin/wasm-ld \
 	--export=sqlite3_strnicmp \
 	--export=sqlite3_system_errno \
 	--export=sqlite3_table_column_metadata \
-	--export=sqlite3_test_control \
 	--export=sqlite3_threadsafe \
 	--export=sqlite3_total_changes \
 	--export=sqlite3_total_changes64 \
