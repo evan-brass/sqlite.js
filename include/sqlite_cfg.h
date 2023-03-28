@@ -34,16 +34,16 @@
 #define SQLITE_ALLOW_URI_AUTHORITY
 
 // Enable extra features:
-// #define SQLITE_ENABLE_NORMALIZE
+#define SQLITE_ENABLE_NORMALIZE
 #define SQLITE_DEFAULT_MEMSTATUS 1
-#define SQLITE_ENABLE_DBSTAT
-#define SQLITE_ENABLE_RTREE 1
 
 // Enable amalgamation extensions:
 #define SQLITE_ENABLE_FTS5
 #define SQLITE_ENABLE_MATH_FUNCTIONS
 #define SQLITE_JSON1
-// #define SQLITE_ENABLE_GEOPOLY
+#define SQLITE_ENABLE_GEOPOLY
+#define SQLITE_ENABLE_DBSTAT
+#define SQLITE_ENABLE_RTREE 1
 
 __attribute__((import_name("sqlite3_os_init"))) int sqlite3_os_init(void);
 __attribute__((import_name("sqlite3_os_end"))) int sqlite3_os_end(void);

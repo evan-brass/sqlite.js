@@ -254,6 +254,7 @@ wasi-sdk-19.0/bin/wasm-ld \
 	--export=sqlite3_vtab_nochange \
 	--export=sqlite3_vtab_on_conflict \
 	--export=sqlite3_vtab_rhs_value \
+	--export=sqlite3_normalized_sql \
 	obj/*.o
 
 wasm2wat dist/sqlite3.wasm > dist/sqlite3.wat
