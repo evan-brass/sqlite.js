@@ -9,12 +9,22 @@ wasi-sdk-19.0/bin/clang \
 	-Iinclude \
 	vendor/sqlite3.c
 
+wasi-sdk-19.0/bin/clang \
+	-c \
+	-Os \
+	-o obj/vfs.o \
+	-D_HAVE_SQLITE_CONFIG_H \
+	-Iinclude \
+	c_src/vfs.c
+
 wasi-sdk-19.0/bin/wasm-ld \
 	-o dist/sqlite3.wasm \
 	-Llib \
 	-lclang_rt.builtins-wasm32 \
 	-lc \
 	--no-entry \
+	--export=allocate_vfs --export=get_io_methods --export=set_logging \
+	--export=malloc --export=free --export=realloc \
 	--export=sqlite3_aggregate_context \
 	--export=sqlite3_auto_extension \
 	--export=sqlite3_autovacuum_pages \
@@ -258,7 +268,7 @@ wasi-sdk-19.0/bin/wasm-ld \
 	obj/*.o
 
 wasm2wat dist/sqlite3.wasm > dist/sqlite3.wat
-grep -E "import|export" dist/sqlite3.wat
+grep -E "\(import|\(export" dist/sqlite3.wat
 
 wasm-opt \
 	-O4 \
