@@ -1,25 +1,48 @@
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
 const temp = new BigInt64Array(1);
 const tempf = new Float64Array(temp.buffer);
 function write_args(data, args) {
+	const max_args = data.length - 1;
+	if (args.length > max_args) throw new Error("A larger shared array is required to pass this many arguments");
+	const types = 0n;
 	for (let i = 0; i < args.length; ++i) {
-		const num = Number(args[i]);
-		// Convert js numeber (float64) to bigint64
-		tempf[0] = num;
-		Atomics.store(data, i, temp[0]);
+		const arg = args[i];
+		if (typeof arg == 'number') {
+			// Convert js numeber (float64) to bigint64
+			const num = Number(args[i]);
+			tempf[0] = num;
+			Atomics.store(data, i + 1, temp[0]);
+		} else if (typeof arg == 'bigint') {
+			types |= 1n << BigInt(i);
+			Atomics.store(data, i + 1, arg);
+		}
+		Atomics.store(data, 0, types);
 	}
 }
 function read_args(data, length) {
+	const max_args = data.length - 1;
+	if (length > max_args) throw new Error("A larger shared array is required to pass this many arguments");
+	const types = data[0];
+
 	const ret = [];
 	for (let i = 0; i < length; ++i) {
-		temp[0] = Atomics.load(data, i);
-		ret.push(tempf[0]);
+		const type = types & (1n << BigInt(i));
+		if (type) {
+			ret.push(Atomics.load(data, i + 1));
+		} else {
+			temp[0] = Atomics.load(data, i + 1);
+			ret.push(tempf[0]);
+		}
 	}
 	return ret;
 }
 
-export default async function spawn_in_worker(wasm_source, imports, { sab_size = 256, transfer_size = 4096 } = {}) {
+export default async function spawn_in_worker(wasm_source, imports, { max_args = 8, transfer_size = 4096 } = {}) {
 	const worker = new Worker(new URL('vm.mjs', import.meta.url), {type: 'module'});
-	const sab = new SharedArrayBuffer(sab_size);
+	const sab = new SharedArrayBuffer(4*(1 + 1) + 8*(1 + max_args));
 	const transfer = new SharedArrayBuffer(transfer_size);
 	const trans = new Uint8Array(transfer);
 
@@ -62,6 +85,16 @@ export default async function spawn_in_worker(wasm_source, imports, { sab_size =
 						ret[i] = Atomics.load(trans, i);
 					}
 				},
+				async read_i32(ptr) {
+					await stub(i, 3, ptr);
+					const [ret] = read_args(data, 1);
+					return ret;
+				},
+				async cstr_len(ptr) {
+					await stub(i, 4, ptr);
+					const [len] = read_args(data, 1);
+					return len;
+				},
 				async write(ptr, buffer) {
 					// TODO: Handle larger than transfer.byteLength transfers in parts
 					const buff = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
@@ -92,10 +125,12 @@ export default async function spawn_in_worker(wasm_source, imports, { sab_size =
 			const res = resolves[depth];
 			if (res) {
 				res(read_args(data, 1)[0]);
+				resolves[depth] = false;
 			} else {
 				const def = import_defs[Atomics.load(state, 1)];
 				if (def.kind !== 'function') throw new Error('Not function?');
 				const func = imports[def.module][def.name];
+				if (func === undefined) throw new Error(`Missing import: ${def.module}.${def.name}`);
 				const args = read_args(data, func.length);
 				(async () => {
 					const res = await imports[def.module][def.name](...args);
@@ -151,17 +186,29 @@ self.addEventListener('message', async ({ data: temp }) => {
 				const def = export_defs[Atomics.load(state, 1)];
 				if (def.kind == 'memory') {
 					const [rw, ptr, len, val] = read_args(data, 3);
-					const mem8 = new Uint8Array(inst.exports[def.name]);
-					for (let i = 0; i < len; ++i) {
-						if (rw == 2) {
-							// Fill
-							mem8.fill(val, ptr, ptr + len);
-						} else if (rw == 0) {
-							// Read
-							Atomics.store(trans, i, mem8[ptr + i]);
-						} else if (rw == 1) {
-							// Write
-							mem8[ptr + i] = Atomics.load(trans, i);
+					const mem8 = new Uint8Array(inst.exports[def.name].buffer);
+					if (rw == 2) {
+						// Fill
+						mem8.fill(val, ptr, ptr + len);
+					} else if (rw == 3) {
+						// Read i32
+						const dv = new DataView(mem8.buffer, mem8.byteOffset, mem8.byteLength);
+						write_args(data, [dv.getInt32(ptr, true)]);
+					} else if (rw == 4) { 
+						// CStr len
+						let i;
+						for (i = ptr; i < mem8.byteLength && mem8[i] != 0; ++i) {}
+
+						write_args(data, [i - ptr]);
+					} else {
+						for (let i = 0; i < len; ++i) {
+							if (rw == 0) {
+								// Read
+								Atomics.store(trans, i, mem8[ptr + i]);
+							} else if (rw == 1) {
+								// Write
+								mem8[ptr + i] = Atomics.load(trans, i);
+							}
 						}
 					}
 				} else if (def.kind == 'function') {

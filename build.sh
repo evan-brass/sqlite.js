@@ -274,3 +274,9 @@ wasm-opt \
 	-O4 \
 	-o dist/sqlite3_opt.wasm \
 	dist/sqlite3.wasm
+
+wasm-opt \
+	-O4 \
+	--asyncify \
+	-o dist/sqlite3_opt_async.wasm \
+	dist/sqlite3_opt.wasm
