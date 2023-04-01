@@ -1,17 +1,16 @@
-import { Vfs, VfsFile } from './sqlite.mjs';
-import { SQLITE_OK, SQLITE_ACCESS_EXISTS, SQLITE_FCNTL_BEGIN_ATOMIC_WRITE, SQLITE_FCNTL_COMMIT_ATOMIC_WRITE, SQLITE_FCNTL_ROLLBACK_ATOMIC_WRITE, SQLITE_IOCAP_ATOMIC, SQLITE_IOCAP_BATCH_ATOMIC, SQLITE_IOCAP_SAFE_APPEND, SQLITE_IOCAP_SEQUENTIAL, SQLITE_NOTFOUND, SQLITE_OPEN_CREATE, SQLITE_OPEN_DELETEONCLOSE } from './sqlite_def.mjs';
+import { Vfs, VfsFile } from './sql.mjs';
+import { SQLITE_OK, SQLITE_ACCESS_EXISTS, SQLITE_FCNTL_BEGIN_ATOMIC_WRITE, SQLITE_FCNTL_COMMIT_ATOMIC_WRITE, SQLITE_FCNTL_ROLLBACK_ATOMIC_WRITE, SQLITE_IOCAP_ATOMIC, SQLITE_IOCAP_BATCH_ATOMIC, SQLITE_NOTFOUND, SQLITE_OPEN_CREATE, SQLITE_OPEN_DELETEONCLOSE } from './sqlite_def.mjs';
 
 const dir = await navigator.storage.getDirectory();
 
-class OpfsFile {
+class OpfsFile extends VfsFile {
 	#handle;
 	#lock;
-	#lock_reserved;
 	#writable = false;
 	flags = 0;
 	sector_size = 0;
 	constructor(handle, _flags) {
-		// super();
+		super();
 		this.#handle = handle;
 		this.flags = 0;
 	}
@@ -31,18 +30,15 @@ class OpfsFile {
 		console.log(this.#handle.name, 'sync');
 		// Do Nothing.
 	}
-	async read(buffer, offset) {
-		console.log(this.#handle.name, 'read', buffer.byteLength, 'at', offset);
+	async read(offset, len) {
+		console.log(this.#handle.name, 'read', len, 'at', offset);
 		offset = Number(offset);
 		if (this.#writable) throw new Error();
 		const file = await this.#handle.getFile();
-		const section = file.slice(offset, offset + buffer.byteLength);
+		const section = file.slice(offset, offset + len);
 		const data = new Uint8Array(await section.arrayBuffer());
-		// const all = new Uint8Array(await file.arrayBuffer());
-		// const data = all.slice(offset, offset + buffer.byteLength);
-		console.log(data.slice());
-		buffer.set(data);
-		return data.byteLength;
+		console.log(data);
+		return data;
 	}
 	async write(buffer, offset) {
 		console.log(this.#handle.name, 'write', buffer.byteLength, 'at', offset);
@@ -108,7 +104,7 @@ class OpfsFile {
 	check_reserved_lock() {
 		throw new Error();
 	}
-	sector_size() { return 0; }
+	sector_size() { return 1; }
 	device_characteristics() {
 		console.log(this.#handle.name, 'iocap');
 		// return SQLITE_IOCAP_BATCH_ATOMIC | SQLITE_IOCAP_SAFE_APPEND | SQLITE_IOCAP_SEQUENTIAL | SQLITE_IOCAP_UNDELETABLE_WHEN_OPEN;

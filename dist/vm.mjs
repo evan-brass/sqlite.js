@@ -1,157 +1,198 @@
+/**
+ * We use two shared array buffers.  One for arguments, and one for memory data transfer.
+ * Arguments:
+ * +--i32--+--i32--+--i64--+----[i64]-----+
+ * | depth | index | types | arguments... |
+ * +-------+-------+-------+--------------+
+ * The count field is used to un-suspend the worker thread.  It is incremented and notified by the main thread.  When the worker suspends, it posts a message back with either a return value or a function call.  Atomics.waitAsync doesn't have full support yet, and even if it did it's still been difficult to pass arguments / values back and forth using the same system.
+ * 
+ * To indicate which export we're calling, we set the index field.  We index into the definitions returned from WebAssembly.Module.exports.
+ * 
+ * We only support numeric arguments: Number or Bigint.  The types field is a bitmap of which arguments are numbers and which are bigints.  Since the types field is 64 bits, we can support a maximum of 64 arguments per exported function.
+ * 
+ * The arguments are stored either as f64 or i64.  Since Atomics.store / Atomics.load only works with integer typed arrays, we need to convert the f64 to an i64 before setting it.
+ * 
+ * To determine how many arguments to pass to an exported function / imported function, we use the function's length: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/length  For both imports and exports, the side that executes the function will know how many arguments based on the length, and the calling side knows how many arguments to push because it is given an argument list.
+ * 
+ * A second SharedArrayBuffer is used to transfer memory into the worker.  Since we're using post message, we can post message memory buffers out of the worker: the transfer buffer is only used when writing memory from main->worker.
+ * When writing sections of memory larger than the transfer buffer's size, we have to copy it in pieces.
+ */
+if (typeof SharedArrayBuffer != 'function') {
+	throw new Error('Shared array buffer is required: https://developer.mozilla.org/en-US/docs/Web/API/crossOriginIsolated');
+}
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-const temp = new BigInt64Array(1);
-const tempf = new Float64Array(temp.buffer);
-function write_args(data, args) {
-	const max_args = data.length - 1;
-	if (args.length > max_args) throw new Error("A larger shared array is required to pass this many arguments");
-	const types = 0n;
-	for (let i = 0; i < args.length; ++i) {
-		const arg = args[i];
-		if (typeof arg == 'number') {
-			// Convert js numeber (float64) to bigint64
-			const num = Number(args[i]);
-			tempf[0] = num;
-			Atomics.store(data, i + 1, temp[0]);
-		} else if (typeof arg == 'bigint') {
-			types |= 1n << BigInt(i);
-			Atomics.store(data, i + 1, arg);
-		}
-		Atomics.store(data, 0, types);
-	}
+function f2b(float) {
+	const out = new BigInt64Array(1);
+	new Float64Array(out.buffer)[0] = float;
+	return out[0];
 }
-function read_args(data, length) {
-	const max_args = data.length - 1;
-	if (length > max_args) throw new Error("A larger shared array is required to pass this many arguments");
-	const types = data[0];
+function b2f(bigint) {
+	const out = new Float64Array(1);
+	new BigInt64Array(out.buffer)[0] = bigint;
+	return out[0];
+}
 
-	const ret = [];
-	for (let i = 0; i < length; ++i) {
-		const type = types & (1n << BigInt(i));
-		if (type) {
-			ret.push(Atomics.load(data, i + 1));
-		} else {
-			temp[0] = Atomics.load(data, i + 1);
-			ret.push(tempf[0]);
+function make_state(shared_buffer, transfer_buffer) {
+	const i32 = new Int32Array(shared_buffer);
+	const i64 = new BigInt64Array(shared_buffer, 8);
+	const max_args = Math.min(i64.length - 1, 64);
+	const trans = new Uint8Array(transfer_buffer);
+
+	return {
+		// Used to call exports:
+		call(i, ...args) {
+			Atomics.store(i32, 1, i);
+			this.write_args(...args);
+			Atomics.add(i32, 0, 1);
+			Atomics.notify(i32, 0);
+		},
+		// Used by the worker to suspend:
+		suspend() {
+			const v = Atomics.load(i32, 0);
+			Atomics.wait(i32, 0, v);
+		},
+		get depth() { return Atomics.load(i32, 0); },
+		set depth(val) { Atomics.store(i32, 0, val); Atomics.notify(i32, 0); },
+		get index() { return Atomics.load(i32, 1); },
+		set index(val) { Atomics.store(i32, 1, val); },
+		// Arguments:
+		get types() { return Atomics.load(i64, 0); },
+		set types(val) { Atomics.store(i64, 0, val); },
+		write_args(...args) {
+			if (args.length > max_args) throw new Error("Can't handle this many arguments.");
+			let types = 0n;
+			for (let i = 0; i < args.length; ++i) {
+				let arg = args[i];
+				if (typeof arg == 'boolean') arg = Number(arg); // Convert booleans into numbers
+				if (typeof arg == 'number') {
+					types |= 1n << BigInt(i);
+					arg = f2b(arg);
+				}
+				if (typeof arg != 'bigint') throw new Error("Can't write this type of argument.");
+				Atomics.store(i64, i + 1, arg);
+			}
+			this.types = types;
+		},
+		read_args(num_args) {
+			if (num_args > max_args) throw new Error("Can't handle this many arguments.");
+			const types = this.types;
+			const ret = [];
+			for (let i = 0; i < num_args; ++i) {
+				const is_number = Boolean(types & (1n << BigInt(i)));
+				let arg = Atomics.load(i64, i + 1);
+				if (is_number) arg = b2f(arg);
+				ret.push(arg);
+			}
+			return ret;
+		},
+		start_call(index, ...args) {
+			this.index = index;
+			this.write_args(...args);
+			this.depth += 1;
+		},
+		return(ret_val = 0) {
+			this.write_args(ret_val);
+			this.depth -= 1;
+		},
+		wait(depth) {
+			Atomics.wait(i32, 0, depth);
+			return this.depth;
+		},
+		// Read / write from the transfer buffer:
+		write_transfer(buffer) {
+			if (buffer.byteLength > trans.byteLength) throw new Error('Buffer larger than the transfer buffer.');
+			const u8 = new Uint8Array(ArrayBuffer.isView(buffer) ? buffer.buffer : buffer, buffer.byteOffset ?? 0, buffer.byteLength);
+			for (let i = 0; i < u8.byteLength; ++i) {
+				Atomics.store(trans, i, u8[i]);
+			}
+		},
+		read_transfer(buffer) {
+			if (buffer.byteLength > transfer_buffer.byteLength) throw new Error('Buffer larger than the transfer buffer.');
+			const u8 = new Uint8Array(ArrayBuffer.isView(buffer) ? buffer.buffer : buffer, buffer.byteOffset ?? 0, buffer.byteLength);
+			for (let i = 0; i < u8.byteLength; ++i) {
+				u8[i] = Atomics.load(trans, i);
+			}
 		}
-	}
-	return ret;
+	};
 }
 
 export default async function spawn_in_worker(wasm_source, imports, { max_args = 8, transfer_size = 4096 } = {}) {
-	const worker = new Worker(new URL('vm.mjs', import.meta.url), {type: 'module'});
-	const sab = new SharedArrayBuffer(4*(1 + 1) + 8*(1 + max_args));
+	const sab = new SharedArrayBuffer(4 + 4 + 8 + 8 * max_args);
 	const transfer = new SharedArrayBuffer(transfer_size);
-	const trans = new Uint8Array(transfer);
 
-	const wasm_module = await WebAssembly.compileStreaming(wasm_source);
-	const import_defs = WebAssembly.Module.imports(wasm_module);
+	const wasm_module = (wasm_source instanceof WebAssembly.Module) ? wasm_source : await WebAssembly.compileStreaming(wasm_source);
 	const export_defs = WebAssembly.Module.exports(wasm_module);
 
-	const state = new Int32Array(sab, 0, 2); // state[0] = depth, state[1] = opcode / func_idx
-	const data = new BigInt64Array(sab, 8);
+	const state = make_state(sab, transfer);
 
-	worker.postMessage({wasm_module, sab, transfer, import_defs, export_defs});
+	const worker = new Worker(import.meta.url, {type: 'module'});
+	worker.addEventListener('error', console.error);
+	worker.addEventListener('message', ({data}) => console.log('message', data));
+	worker.addEventListener('messageerror', console.warn);
+	worker.addEventListener('rejectionhandled', console.warn);
+	worker.addEventListener('unhandledrejection', console.error);
+	worker.postMessage({wasm_module, sab, transfer, export_defs});
 
-	const resolves = [];
-
-	let depth = 0;
-	function stub(index, ...args) {
-		if (depth % 2 == 1) throw new Error("The main thread doesn't have control!");
-
-		return new Promise(res => {
-			resolves[depth] = res;
-			write_args(data, args);
-			Atomics.store(state, 1, index);
-			Atomics.store(state, 0, depth + 1);
-			Atomics.notify(state, 0);
-		});
+	const exports = {
+		terminate() { worker.terminate(); }
 	};
-
-	// Stub out the exports:
-	const exports = {};
+	const resolves = [];
+	worker.addEventListener('message', async ({ data }) => {
+		const { ret_val } = data;
+		if (ret_val) {
+			resolves.pop()(ret_val);
+		} else {
+			const { module, name, args } = data;
+			const ret = await imports[module][name](...args);
+			state.return(ret);
+		}
+	});
+	function call(i, ...args) {
+		return new Promise(res => {
+			resolves.push(res);
+			state.start_call(i, ...args);
+		});
+	}
 	for (let i = 0; i < export_defs.length; ++i) {
 		const {name, kind} = export_defs[i];
-		// TODO: Support memory and global exports
 		if (kind == 'memory') {
 			exports[name] = {
-				async read(ptr, len) {
-					// TODO: Handle larger than transfer.byteLength transfers in parts
-					await stub(i, 0, ptr, len);
-					const ret = new Uint8Array(len);
-					for (let i = 0; i < ret.byteLength; ++i) {
-						ret[i] = Atomics.load(trans, i);
+				read(ptr, len) {
+					return call(i, 0, ptr, len);
+				},
+				async write(ptr, src) {
+					let i = 0;
+					while (i < src.byteLength) {
+						const buff = new Uint8Array(src.buffer, src.byteOffset + i, Math.min(src.byteLength - i, transfer_size));
+						state.write_transfer(buff);
+						await call(i, 1, ptr + i, buff.byteLength);
+
+						i += buff.byteLength;
 					}
 				},
-				async read_i32(ptr) {
-					await stub(i, 3, ptr);
-					const [ret] = read_args(data, 1);
-					return ret;
-				},
-				async cstr_len(ptr) {
-					await stub(i, 4, ptr);
-					const [len] = read_args(data, 1);
-					return len;
-				},
-				async write(ptr, buffer) {
-					// TODO: Handle larger than transfer.byteLength transfers in parts
-					const buff = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-					for (let i = 0; i < buff.byteLength; ++i) {
-						Atomics.store(trans, i, buff[i]);
-					}
-					await stub(i, 1, ptr, buff.byteLength);
-				},
-				// Fill is a bytewise-fill (val must be a u8):
-				async fill(ptr, len, val = 0) {
-					await stub(i, 2, ptr, len, val);
-				}
+				read_cstr(ptr) { debugger; }
 			};
+			// TODO: Support DataView operations
 		}
 		else if (kind == 'function') {
-			exports[name] = stub.bind(undefined, i);
+			exports[name] = function stub(...args) {
+				return call(i, ...args);
+			};
 		}
 	}
-
-	// Start the execution loop:
-	(async () => {
-		while (1) {
-			await Atomics.waitAsync(state, 0, depth).value;
-			depth = Atomics.load(state, 0);
-			if (depth % 2 == 1) continue;
-			console.log('main', depth);
-
-			const res = resolves[depth];
-			if (res) {
-				res(read_args(data, 1)[0]);
-				resolves[depth] = false;
-			} else {
-				const def = import_defs[Atomics.load(state, 1)];
-				if (def.kind !== 'function') throw new Error('Not function?');
-				const func = imports[def.module][def.name];
-				if (func === undefined) throw new Error(`Missing import: ${def.module}.${def.name}`);
-				const args = read_args(data, func.length);
-				(async () => {
-					const res = await imports[def.module][def.name](...args);
-					Atomics.store(state, 0, depth - 1);
-					write_args(data, [res]);
-					Atomics.notify(state, 0);
-				})();
-			}
-			// TODO:
-		}
-	})();
-
+	
 	return exports;
 }
 self.addEventListener('message', async ({ data: temp }) => {
-	const { wasm_module, sab, transfer, import_defs, export_defs } = temp;
-	if (!wasm_module || !sab) return; // Not a worker
+	const { wasm_module, sab, transfer, export_defs } = temp;
+	if (!wasm_module || !sab) return; // Oops.
 
-	const state = new Int32Array(sab, 0, 2); // state[0] = depth, state[1] = opcode / func_idx
-	const data = new BigInt64Array(sab, 8); // Argument types and Number arguments
-	const trans = new Uint8Array(transfer);
+	const import_defs = WebAssembly.Module.imports(wasm_module);
+
+	const state = make_state(sab, transfer);
 
 	const imports = {};
 	for (let i = 0; i < import_defs.length; ++i) {
@@ -159,70 +200,50 @@ self.addEventListener('message', async ({ data: temp }) => {
 		if (kind != 'function') throw new Error('Only function imports are supported.');
 
 		imports[module] ??= {};
-		imports[module][name] = stub.bind(undefined, i);
+		imports[module][name] = function stub(...args) {
+			const depth = state.depth;
+			self.postMessage({ module, name, args });
+			return handler(depth + 1);
+		}
 	}
 
 	const inst = await WebAssembly.instantiate(wasm_module, imports);
 
-	let depth = 0;
-	function stub(index, ...args) {
-		if (depth % 2 == 0) throw new Error("The worker thread doesn't have control!");
-		Atomics.store(state, 1, index);
-		write_args(data, args);
-		Atomics.store(state, 0, depth + 1);
-		Atomics.notify(state, 0);
-		return handle(depth);
-	}
-	function handle(init_depth = depth) {
+	function handler(depth = 0) {
+		let current_depth = depth;
 		while (1) {
-			Atomics.wait(state, 0, depth);
-			depth = Atomics.load(state, 0);
-			if (depth % 2 == 0) continue;
-			console.log('worker', depth);
-
-			if (depth == init_depth) {
-				return read_args(data, 1)[0];
-			} else if (depth > init_depth) {
-				const def = export_defs[Atomics.load(state, 1)];
-				if (def.kind == 'memory') {
-					const [rw, ptr, len, val] = read_args(data, 3);
-					const mem8 = new Uint8Array(inst.exports[def.name].buffer);
-					if (rw == 2) {
-						// Fill
-						mem8.fill(val, ptr, ptr + len);
-					} else if (rw == 3) {
-						// Read i32
-						const dv = new DataView(mem8.buffer, mem8.byteOffset, mem8.byteLength);
-						write_args(data, [dv.getInt32(ptr, true)]);
-					} else if (rw == 4) { 
-						// CStr len
-						let i;
-						for (i = ptr; i < mem8.byteLength && mem8[i] != 0; ++i) {}
-
-						write_args(data, [i - ptr]);
-					} else {
-						for (let i = 0; i < len; ++i) {
-							if (rw == 0) {
-								// Read
-								Atomics.store(trans, i, mem8[ptr + i]);
-							} else if (rw == 1) {
-								// Write
-								mem8[ptr + i] = Atomics.load(trans, i);
-							}
-						}
-					}
-				} else if (def.kind == 'function') {
-					const func = inst.exports[def.name];
-					const args = read_args(data, func.length);
-					const ret = func(...args);
-					write_args(data, [ret]);
+			current_depth = state.wait(current_depth);
+			if (current_depth > depth) {
+				const {name, kind} = export_defs[state.index];
+				const exp = inst.exports[name];
+				if (kind == 'function') {
+					const args = state.read_args(exp.length);
+					const ret_val = exp(...args);
+					self.postMessage({ ret_val });
 				}
-				Atomics.store(state, 0, depth - 1);
-				Atomics.notify(state, 0);
+				else if (kind == 'memory') {
+					const [sub_op, ptr, len] = state.read_args(3);
+					const buff = new Uint8Array(exp.buffer, ptr, len);
+					if (sub_op == 0) {
+						const ret_val = buff.slice();
+						self.postMessage({ ret_val }, [ret_val]);
+					}
+					else if (sub_op == 1) {
+						// Write to memory:
+						state.read_transfer(buff);
+					}
+					else {
+						debugger;
+					}
+				}
+			} else if (current_depth < depth) {
+				return state.read_args(1)[0];
 			} else {
-				throw new Error("Evan must be a god damned idiot.");
+				console.log('¿equal?');
 			}
 		}
-	}
-	handle();
+	};
+	handler();
+	console.error('Should be unreachable!')
+	debugger;
 }, {once: true});
