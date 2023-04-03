@@ -1,4 +1,11 @@
-import { SQLITE_CANTOPEN, SQLITE_DONE, SQLITE_OK, SQLITE_IOERR, SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE, SQLITE_ROW } from "./sqlite_def.mjs";
+import { 
+	SQLITE_OK,
+	SQLITE_CANTOPEN,
+	SQLITE_ROW, SQLITE_DONE,
+	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ,
+	SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
+	SQLITE_INTEGER, SQLITE_FLOAT, SQLITE3_TEXT, SQLITE_BLOB, SQLITE_NULL
+} from "./sqlite_def.mjs";
 import spawn_in_worker from "./vm.mjs";
 
 const encoder = new TextEncoder();
@@ -15,7 +22,7 @@ export class Vfs {
 	async delete(filename, sync) { throw new Error("Default VFS only supports in-memory connections."); }
 	async access(filename, flags) { throw new Error("Default VFS only supports in-memory connections."); }
 	full_pathname(filename) { return filename; }
-	randomness(buff) { crypto.getRandomValues(buff); return buff.byteLength; }
+	randomness(len) { return crypto.getRandomValues(new Uint8Array(len)); }
 	async sleep(microseconds) { await new Promise(res => setTimeout(res, microseconds / 1000)); }
 	current_time() { return BigInt(Date.now()) + 210866760000000n; }
 }
@@ -37,8 +44,9 @@ export class VfsFile {
 export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', import.meta.url)), {
 	env: {
 		async logging(_, code, msg_ptr) {
-			const message = cstr_to_js(msg_ptr);
+			const message = await read_str(msg_ptr);
 			console.log(`SQLite(${code}): ${message}`);
+			return 0; // Unused, but this is because every import is required to return a numeric value
 		},
 		async sqlite3_os_init() {
 			console.log('sqlite3_os_init');
@@ -63,8 +71,10 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 				file_vfs.set(file_out, impl);
 				
 				const io_methods = await sqlite3.get_io_methods();
-				await sqlite3.memory.write_i32(flags_out, file.flags);
-				await sqlite3.memory.write_i32(file_out, io_methods);
+				const flags_out_dv = sqlite3.memory.dv(flags_out, 4);
+				(flags_out_dv.setInt32(0, file.flags, true), await flags_out_dv.store());
+				const file_out_dv = sqlite3.memory.dv(file_out, 4);
+				(file_out_dv.setInt32(0, io_methods, true), await file_out_dv.store());
 				
 				return SQLITE_OK;
 			} catch (e) {
@@ -75,7 +85,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		async xDelete(vfs, filename_ptr, sync) {
 			const impl = vfs_impls.get(vfs);
-			const filename = cstr_to_js(filename_ptr);
+			const filename = await read_str(filename_ptr);
 			console.log('xDelete', impl, filename, sync);
 			try {
 				await impl.delete(filename, sync);
@@ -89,11 +99,12 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		async xAccess(vfs, filename_ptr, flags, result_ptr) {
 			const impl = vfs_impls.get(vfs);
-			const filename = cstr_to_js(filename_ptr);
+			const filename = await read_str(filename_ptr);
 			console.log('xAccess', impl, filename, flags);
 			try {
 				const res = await impl.access(filename, flags);
-				memdv().setInt32(result_ptr, res ? 1 : 0, true);
+				const result_dv = sqlite3.memory.dv(result_ptr, 4);
+				(result_dv.setInt32(0, res ? 1 : 0, true), await result_dv.store());
 		
 				return SQLITE_OK;
 			} catch (e) {
@@ -113,15 +124,16 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 			await sqlite3.memory.write(buff_ptr, encoded);
 			return SQLITE_OK;
 		},
-		xRandomness(vfs, buff_len, buff_ptr) {
+		async xRandomness(vfs, buff_len, buff_ptr) {
 			const impl = vfs_impls.get(vfs);
-			const buffer = mem8(buff_ptr, buff_len);
 			console.log('xRandomness', impl);
-			return impl.randomness(buffer);
+			const bytes = await impl.randomness(buff_len);
+			await sqlite3.memory.write(buff_ptr, bytes);
+			return bytes.byteLength;
 		},
 		async xSleep(vfs, microseconds) {
 			const impl = vfs_impls.get(vfs);
-			// console.log('xSleep', impl, microseconds);
+			console.log('xSleep', impl, microseconds);
 			const ret = await impl.sleep(microseconds);
 			return ret;
 		},
@@ -134,11 +146,12 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 			await sqlite3.memory.write(buff_ptr, encoded);
 			return SQLITE_OK;
 		},
-		xCurrentTimeInt64(vfs, out_ptr) {
+		async xCurrentTimeInt64(vfs, out_ptr) {
 			const impl = vfs_impls.get(vfs);
 			console.log('xCurrentTimeInt64', impl);
 			const res = impl.current_time();
-			memdv().setBigInt64(out_ptr, res, true);
+			const out_dv = sqlite3.memory.dv(out_ptr, 8);
+			(out_dv.setBigInt64(0, res, true), await out_dv.store());
 		},
 		async xClose(file) {
 			const impl = file_impls.get(file);
@@ -157,12 +170,11 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 			const impl = file_impls.get(file);
 			console.log('xRead', impl, offset, buff_len);
 			try {
-				const read_buffer = await impl.read(offset, buff_len);
-				const buffer = mem8(buff_ptr, buff_len);
-				buffer.set(read_buffer);
-				if (read_buffer.byteLength < buff_len) {
+				const read = await impl.read(offset, buff_len);
+				await sqlite3.memory.write(buff_ptr, read);
+				if (read.byteLength < buff_len) {
 					// Zero out the buffer.
-					buffer.fill(0, read_buffer.byteLength);
+					await sqlite3.memory.fill(buff_ptr + read.byteLength, buff_len - read.byteLength, 0);
 					return SQLITE_IOERR_SHORT_READ;
 				}
 				return SQLITE_OK;
@@ -175,7 +187,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		async xWrite(file, buff_ptr, buff_len, offset) {
 			const impl = file_impls.get(file);
-			const buffer = mem8(buff_ptr, buff_len);
+			const buffer = await sqlite3.memory.read(buff_ptr, buff_len);
 			console.log('xWrite', impl, offset, buff_len);
 			try {
 				await impl.write(buffer, offset);
@@ -191,8 +203,8 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 			const impl = file_impls.get(file);
 			console.log('xTruncate', impl);
 			try {
-				const res = co_await(impl.truncate.bind(impl), size);
-				if (res != suspended) { return SQLITE_OK; }
+				await impl.truncate(size);
+				return SQLITE_OK;
 			} catch (e) {
 				const vfs = file_vfs.get(file);
 				last_errors.set(vfs, `${e.name}: ${e.message}`);
@@ -218,7 +230,8 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 			console.log('xFileSize', impl);
 			try {
 				const size = await impl.size();
-				memdv().setBigInt64(size_ptr, BigInt(size), true);
+				const size_dv = sqlite3.memory.dv(size_ptr, 8);
+				(size_dv.setBigInt64(0, size, true), await size_dv.store());
 				return SQLITE_OK;
 			} catch (e) {
 				const vfs = file_vfs.get(file);
@@ -248,7 +261,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 				await impl.unlock(lock_level);
 				return SQLITE_OK;
 			} catch (e) {
-				const vfs = memdv().getUint32(file + 4, true);
+				const vfs = file_vfs.get(file);
 				last_errors.set(vfs, `${e.name}: ${e.message}`);
 				console.error(e);
 				return SQLITE_IOERR;
@@ -259,7 +272,8 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 			console.log('xCheckReservedLock', impl);
 			try {
 				const res = await impl.check_reserved_lock(); 
-				memdv().setInt32(res_ptr, res ? 1 : 0);
+				const res_dv = sqlite3.memory.dv(res_ptr, 4);
+				(res_dv.setInt32(0, res ? 1 : 0, true), await res_dv.store());
 				return SQLITE_OK;
 			} catch (e) {
 				const vfs = file_vfs.get(file);
@@ -303,8 +317,8 @@ async function alloc_str(s) {
 	await sqlite3.memory.write(ptr, encoded);
 	return ptr;
 }
-async function read_str(ptr) {
-	const len = await sqlite3.memory.cstr_len(ptr);
+async function read_str(ptr, len) {
+	if (!len) len = await sqlite3.memory.strlen(ptr);
 	let ret = '';
 	if (len > 0) {
 		const buff = await sqlite3.memory.read(ptr, len);
@@ -324,6 +338,11 @@ async function handle_error(code, conn) {
 	const msg = await read_str(ptr);
 	throw new Error(`SQLite Error(${code}): ${msg}`);
 }
+async function alloc_dv(len) {
+	const ptr = await sqlite3.malloc(len);
+	if (!ptr) return;
+	return sqlite3.memory.dv(ptr, len);
+}
 export async function register_vfs(vfs_impl, make_default = false) {
 	const name_ptr = await alloc_str(vfs_impl.name);
 	const vfs_ptr = await sqlite3.allocate_vfs(name_ptr, vfs_impl.max_pathname);
@@ -336,21 +355,113 @@ export async function register_vfs(vfs_impl, make_default = false) {
 }
 
 export default async function connect(pathname, flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_EXRESCODE) {
-	let pathname_ptr, conn_ptr;
+	let pathname_ptr, conn_dv;
+	let conn;
 	try {
 		pathname_ptr = await alloc_str(pathname);
-		conn_ptr = await sqlite3.malloc(4);
-		if (!pathname_ptr || !conn_ptr) return;
-		const res = await sqlite3.sqlite3_open_v2(pathname_ptr, conn_ptr, flags, 0);
-		const conn = await sqlite3.memory.read_i32(conn_ptr);
+		conn_dv = await alloc_dv(4);
+		if (!pathname_ptr || !conn_dv) return;
+		const res = await sqlite3.sqlite3_open_v2(pathname_ptr, conn_dv.ptr, flags, 0);
+		conn = (await conn_dv.load()).getInt32(0, true);
 		handle_error(res);
-	
-		return conn;
 	} catch(e) {
 		await sqlite3.sqlite3_close_v2(conn);
 		throw e;
 	} finally {
 		await sqlite3.free(pathname_ptr);
-		await sqlite3.free(conn_ptr);
+		await sqlite3.free(conn_dv.ptr);
 	}
+
+	return async function* sql(strings, ...args) {
+		// Concat the strings:
+		let concat = strings[0];
+		const named_args = [];
+		for (let i = 0; i < args.length; ++i) {
+			const arg = args[i];
+			const str = strings[i + 1];
+			if (typeof arg == 'object' && arg !== null && !(arg instanceof ArrayBuffer)) {
+				named_args.push(arg);
+			}
+			if (typeof arg != 'object' && !(arg instanceof Blob || arg instanceof ArrayBuffer /* TODO: More valid object bindings */)) {
+				concat += '?';
+			}
+			concat += str;
+		}
+		const sql_ptr = await alloc_str(concat);
+		const sql_len = await sqlite3.memory.strlen(sql_ptr);
+		const sql_end_dv = await alloc_dv(4);
+		const stmt_dv = await alloc_dv(4);
+		try {
+			if (!sql_ptr || !sql_end_dv || !stmt_dv) throw new Error('OOM');
+			(sql_end_dv.setInt32(0, sql_ptr, true), await sql_end_dv.store());
+			const sql_end = sql_ptr + sql_len;
+
+			while (1) {
+				const sql_ptr = (await sql_end_dv.load(), sql_end_dv.getInt32(0, true));
+				const remainder = sql_end - sql_ptr;
+				if (remainder <= 1) break;
+
+				let stmt;
+				try {
+					const res = await sqlite3.sqlite3_prepare_v2(conn, sql_ptr, remainder, stmt_dv.ptr, sql_end_dv.ptr);
+					stmt = (await stmt_dv.load(), stmt_dv.getInt32(0, true));
+					await handle_error(res, conn);
+
+					while (1) {
+						if (!stmt) break;
+						const res = await sqlite3.sqlite3_step(stmt);
+						await handle_error(res, conn);
+
+						if (res == SQLITE_ROW) {
+							const data_len = await sqlite3.sqlite3_data_count(stmt);
+							const data = [];
+							for (let i = 0; i < data_len; ++i) {
+								const type = await sqlite3.sqlite3_column_type(stmt, i);
+								function is_safe(int) {
+									return (BigInt(Number.MIN_SAFE_INTEGER) < int) &&
+										(int < BigInt(Number.MAX_SAFE_INTEGER));
+								}
+								if (type == SQLITE_INTEGER) {
+									const int = await sqlite3.sqlite3_column_int64(stmt, i);
+									if (is_safe(int)) {
+										data[i] = Number(int);
+									} else {
+										data[i] = int;
+									}
+								}
+								else if (type == SQLITE_FLOAT) {
+									data[i] = await sqlite3.sqlite3_column_double(stmt, i);
+								}
+								else if (type == SQLITE3_TEXT) {
+									const len = await sqlite3.sqlite3_column_bytes(stmt, i);
+									data[i] = await read_str(await sqlite3.sqlite3_column_text(stmt, i), len);
+								}
+								else if (type == SQLITE_BLOB) {
+									const len = await sqlite3.sqlite3_column_bytes(stmt, i);
+									data[i] = await sqlite3.memory.read(await sqlite3.sqlite3_column_blob(stmt, i), len);
+								}
+								else if (type == SQLITE_NULL) {
+									data[i] = null;
+								}
+								else { throw new Error(); }
+							}
+							yield data;
+						}
+						else if (res == SQLITE_DONE) {
+							break;
+						}
+					}
+				} finally {
+					await sqlite3.sqlite3_finalize(stmt);
+				}
+			}
+		} finally {
+			await sqlite3.free(sql_ptr);
+			await sqlite3.free(sql_end_dv?.ptr);
+			await sqlite3.free(stmt_dv?.ptr);
+		}
+	}
+}
+export async function exec(sql) {
+	for await (const row of sql) { console.log('row', row); }
 }
