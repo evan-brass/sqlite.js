@@ -15,7 +15,7 @@ __attribute__((import_module("vfs"), import_name("xRead"))) int js_xRead(sqlite3
 __attribute__((import_module("vfs"), import_name("xWrite"))) int js_xWrite(sqlite3_file*, const void*, int, sqlite3_int64);
 __attribute__((import_module("vfs"), import_name("xTruncate"))) int js_xTruncate(sqlite3_file*, sqlite3_int64);
 __attribute__((import_module("vfs"), import_name("xSync"))) int js_xSync(sqlite3_file*, int);
-__attribute__((import_module("vfs"), import_name("xSync"))) int js_xFileSize(sqlite3_file*, sqlite3_int64*);
+__attribute__((import_module("vfs"), import_name("xFileSize"))) int js_xFileSize(sqlite3_file*, sqlite3_int64*);
 __attribute__((import_module("vfs"), import_name("xLock"))) int js_xLock(sqlite3_file*, int);
 __attribute__((import_module("vfs"), import_name("xUnlock"))) int js_xUnlock(sqlite3_file*, int);
 __attribute__((import_module("vfs"), import_name("xCheckReservedLock"))) int js_xCheckReservedLock(sqlite3_file*, int*);
