@@ -1,4 +1,4 @@
-wasi-sdk-19.0
+wasi-sdk-20.0
 dist/*.wasm
 dist/*.wat
 obj
