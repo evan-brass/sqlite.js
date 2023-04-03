@@ -62,8 +62,7 @@ class OpfsFile extends VfsFile {
 			this.#writable = false;
 			return SQLITE_OK;
 		} else {
-			// return super.file_control(op, arg);
-			return SQLITE_NOTFOUND;
+			return super.file_control(op, arg);
 		}
 	}
 	async trunc(length) {
@@ -76,7 +75,7 @@ class OpfsFile extends VfsFile {
 	async size() {
 		console.log(this.#handle.name, 'size');
 		const file = await this.#handle.getFile();
-		return file.size;
+		return BigInt(file.size);
 	}
 	lock(lock_level) {
 		console.log(this.#handle.name, 'lock', lock_level);

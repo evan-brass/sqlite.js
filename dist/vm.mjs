@@ -114,28 +114,28 @@ export default async function spawn_in_worker(wasm_source, imports, { max_args =
 	const exports = {
 		terminate() { worker.terminate(); }
 	};
-	for (let i = 0; i < export_defs.length; ++i) {
-		const {name, kind} = export_defs[i];
+	for (let index = 0; index < export_defs.length; ++index) {
+		const {name, kind} = export_defs[index];
 		if (kind == 'memory') {
 			exports[name] = {
 				read(ptr, len) {
-					return call(i, 0, ptr, len);
+					return call(index, 0, ptr, len);
 				},
 				async write(ptr, src) {
 					let i = 0;
 					while (i < src.byteLength) {
 						const buff = new Uint8Array(src.buffer, src.byteOffset + i, Math.min(src.byteLength - i, transfer_size));
 						write_transfer(buff);
-						await call(i, 1, ptr + i, buff.byteLength);
+						await call(index, 1, ptr + i, buff.byteLength);
 
 						i += buff.byteLength;
 					}
 				},
 				fill(ptr, len, val) {
-					return call(i, 2, ptr, len, val);
+					return call(index, 2, ptr, len, val);
 				},
 				strlen(ptr) {
-					return call(i, 3, ptr);
+					return call(index, 3, ptr);
 				},
 				dv(ptr, len = 8) {
 					return new WrappedDataView(this, ptr, len);
@@ -145,7 +145,7 @@ export default async function spawn_in_worker(wasm_source, imports, { max_args =
 		}
 		else if (kind == 'function') {
 			exports[name] = function stub(...args) {
-				return call(i, ...args);
+				return call(index, ...args);
 			};
 		}
 	}
@@ -207,7 +207,8 @@ self.addEventListener('message', async ({ data: temp }) => {
 			Atomics.store(i32, 0, 0);
 			if (op == 0) { continue; /* No Op */ }
 			else if (op == 1) {
-				const {name, kind} = export_defs[Atomics.load(i32, 1)];
+				const index = Atomics.load(i32, 1);
+				const {name, kind} = export_defs[index];
 				const exp = inst.exports[name];
 				if (kind == 'function') {
 					const args = read_args(exp.length);
