@@ -49,14 +49,14 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 			return 0; // Unused, but this is because every import is required to return a numeric value
 		},
 		async sqlite3_os_init() {
-			console.log('sqlite3_os_init');
+			// console.log('sqlite3_os_init');
 			await sqlite3.set_logging();
 			await register_vfs(new Vfs(), true);
 			
 			return SQLITE_OK;
 		},
 		async sqlite3_os_end() {
-			console.log('sqlite3_os_end');
+			// console.log('sqlite3_os_end');
 			return SQLITE_OK;
 		}
 	},
@@ -64,7 +64,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		async xOpen(vfs, filename_ptr, file_out, flags, flags_out) {
 			const impl = vfs_impls.get(vfs);
 			const filename = await read_str(filename_ptr);
-			console.log('xOpen', impl, filename, flags);
+			// console.log('xOpen', impl, filename, flags);
 			try {
 				const file = await impl.open(filename, flags);
 				file_impls.set(file_out, file);
@@ -86,7 +86,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		async xDelete(vfs, filename_ptr, sync) {
 			const impl = vfs_impls.get(vfs);
 			const filename = await read_str(filename_ptr);
-			console.log('xDelete', impl, filename, sync);
+			// console.log('xDelete', impl, filename, sync);
 			try {
 				await impl.delete(filename, sync);
 		
@@ -100,7 +100,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		async xAccess(vfs, filename_ptr, flags, result_ptr) {
 			const impl = vfs_impls.get(vfs);
 			const filename = await read_str(filename_ptr);
-			console.log('xAccess', impl, filename, flags);
+			// console.log('xAccess', impl, filename, flags);
 			try {
 				const res = await impl.access(filename, flags);
 				const result_dv = sqlite3.memory.dv(result_ptr, 4);
@@ -116,7 +116,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		async xFullPathname(vfs, filename_ptr, buff_len, buff_ptr) {
 			const impl = vfs_impls.get(vfs);
 			const filename = await read_str(filename_ptr);
-			console.log('xFullPathname', impl, filename, buff_ptr, buff_len);
+			// console.log('xFullPathname', impl, filename, buff_ptr, buff_len);
 			let full = await impl.full_pathname(filename);
 			if (!full.endsWith('\0')) full += '\0';
 			const encoded = encoder.encode(full);
@@ -126,19 +126,19 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		async xRandomness(vfs, buff_len, buff_ptr) {
 			const impl = vfs_impls.get(vfs);
-			console.log('xRandomness', impl);
+			// console.log('xRandomness', impl);
 			const bytes = await impl.randomness(buff_len);
 			await sqlite3.memory.write(buff_ptr, bytes);
 			return bytes.byteLength;
 		},
 		async xSleep(vfs, microseconds) {
 			const impl = vfs_impls.get(vfs);
-			console.log('xSleep', impl, microseconds);
+			// console.log('xSleep', impl, microseconds);
 			const ret = await impl.sleep(microseconds);
 			return ret;
 		},
 		async xGetLastError(vfs, buff_len, buff_ptr) {
-			console.log('xGetLastError', buff_len);
+			// console.log('xGetLastError', buff_len);
 			let msg = last_errors.get(vfs) ?? "<No Error>";
 			if (!msg.endsWith('\0')) msg += '\0';
 			let encoded = encoder.encode();
@@ -148,14 +148,14 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		async xCurrentTimeInt64(vfs, out_ptr) {
 			const impl = vfs_impls.get(vfs);
-			console.log('xCurrentTimeInt64', impl);
+			// console.log('xCurrentTimeInt64', impl);
 			const res = impl.current_time();
 			const out_dv = sqlite3.memory.dv(out_ptr, 8);
 			(out_dv.setBigInt64(0, res, true), await out_dv.store());
 		},
 		async xClose(file) {
 			const impl = file_impls.get(file);
-			console.log('xClose', impl);
+			// console.log('xClose', impl);
 			try {
 				await impl.close();
 				return SQLITE_OK;
@@ -168,7 +168,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		async xRead(file, buff_ptr, buff_len, offset) {
 			const impl = file_impls.get(file);
-			console.log('xRead', impl, offset, buff_len);
+			// console.log('xRead', impl, offset, buff_len);
 			try {
 				const read = await impl.read(offset, buff_len);
 				await sqlite3.memory.write(buff_ptr, read);
@@ -188,7 +188,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		async xWrite(file, buff_ptr, buff_len, offset) {
 			const impl = file_impls.get(file);
 			const buffer = await sqlite3.memory.read(buff_ptr, buff_len);
-			console.log('xWrite', impl, offset, buff_len);
+			// console.log('xWrite', impl, offset, buff_len);
 			try {
 				await impl.write(buffer, offset);
 				return SQLITE_OK;
@@ -201,7 +201,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		async xTruncate(file, size) {
 			const impl = file_impls.get(file);
-			console.log('xTruncate', impl);
+			// console.log('xTruncate', impl);
 			try {
 				await impl.truncate(size);
 				return SQLITE_OK;
@@ -214,7 +214,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		async xSync(file, flags) {
 			const impl = file_impls.get(file);
-			console.log('xSync', impl, flags);
+			// console.log('xSync', impl, flags);
 			try {
 				await impl.sync(flags);
 				return SQLITE_OK;
@@ -227,7 +227,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		async xFileSize(file, size_ptr) {
 			const impl = file_impls.get(file);
-			console.log('xFileSize', impl);
+			// console.log('xFileSize', impl);
 			try {
 				const size = await impl.size();
 				const size_dv = sqlite3.memory.dv(size_ptr, 8);
@@ -242,7 +242,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		async xLock(file, lock_level) {
 			const impl = file_impls.get(file);
-			console.log('xLock', impl, lock_level);
+			// console.log('xLock', impl, lock_level);
 			try {
 				const res = await impl.lock(lock_level);
 				if (res === false) { return SQLITE_BUSY; }
@@ -256,7 +256,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		async xUnlock(file, lock_level) {
 			const impl = file_impls.get(file);
-			console.log('xUnlock', impl, lock_level);
+			// console.log('xUnlock', impl, lock_level);
 			try {
 				await impl.unlock(lock_level);
 				return SQLITE_OK;
@@ -269,7 +269,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		async xCheckReservedLock(file, res_ptr) {
 			const impl = file_impls.get(file);
-			console.log('xCheckReservedLock', impl);
+			// console.log('xCheckReservedLock', impl);
 			try {
 				const res = await impl.check_reserved_lock(); 
 				const res_dv = sqlite3.memory.dv(res_ptr, 4);
@@ -283,7 +283,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		async xFileControl(file, op, arg) {
 			const impl = file_impls.get(file);
-			console.log('xFileControl', impl, op, arg);
+			// console.log('xFileControl', impl, op, arg);
 			try {
 				const res = await impl.file_control(op, arg);
 				return res;
@@ -296,12 +296,12 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		},
 		xSectorSize(file) {
 			const impl = file_impls.get(file);
-			console.log('xSectorSize', impl);
+			// console.log('xSectorSize', impl);
 			return impl.sector_size;
 		},
 		xDeviceCharacteristics(file) {
 			const impl = file_impls.get(file);
-			console.log('xDeviceCharacteristics', impl);
+			// console.log('xDeviceCharacteristics', impl);
 			return impl.device_characteristics();
 		}
 	}
@@ -463,5 +463,7 @@ export default async function connect(pathname, flags = SQLITE_OPEN_CREATE | SQL
 	}
 }
 export async function exec(sql) {
-	for await (const row of sql) { console.log('row', row); }
+	let last_row;
+	for await (const row of sql) { last_row = row; }
+	return last_row;
 }

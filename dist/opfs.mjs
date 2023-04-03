@@ -21,33 +21,33 @@ class OpfsFile extends VfsFile {
 		return this.lock_name + '-r';
 	}
 	async close() {
-		console.log(this.#handle.name, 'close');
+		// console.log(this.#handle.name, 'close');
 		if (this.flags & SQLITE_OPEN_DELETEONCLOSE) {
 			await this.#handle.remove();
 		}
 	}
 	sync() {
-		console.log(this.#handle.name, 'sync');
+		// console.log(this.#handle.name, 'sync');
 		// Do Nothing.
 	}
 	async read(offset, len) {
-		console.log(this.#handle.name, 'read', len, 'at', offset);
+		// console.log(this.#handle.name, 'read', len, 'at', offset);
 		offset = Number(offset);
 		if (this.#writable) throw new Error();
 		const file = await this.#handle.getFile();
 		const section = file.slice(offset, offset + len);
 		const data = new Uint8Array(await section.arrayBuffer());
-		console.log(data);
+		// console.log(data);
 		return data;
 	}
 	async write(buffer, offset) {
-		console.log(this.#handle.name, 'write', buffer.byteLength, 'at', offset);
-		console.log(buffer.slice());
+		// console.log(this.#handle.name, 'write', buffer.byteLength, 'at', offset);
+		// console.log(buffer.slice());
 		if (!this.#writable) throw new Error();
 		await this.#writable.write({ type: 'write', data: buffer, position: Number(offset) });
 	}
 	async file_control(op, arg) {
-		console.log(this.#handle.name, 'control', op, arg);
+		// console.log(this.#handle.name, 'control', op, arg);
 		if (op == SQLITE_FCNTL_BEGIN_ATOMIC_WRITE) {
 			this.#writable = await this.#handle.createWritable({keepExistingData: true});
 			return SQLITE_OK;
@@ -67,18 +67,18 @@ class OpfsFile extends VfsFile {
 	}
 	async trunc(length) {
 		if (this.#writable) throw new Error();
-		console.log(this.#handle.name, 'trunc', length);
+		// console.log(this.#handle.name, 'trunc', length);
 		const writable = await this.#handle.createWritable({keepExistingData: true});
 		await writable.truncate(Number(length));
 		await writable.close();
 	}
 	async size() {
-		console.log(this.#handle.name, 'size');
+		// console.log(this.#handle.name, 'size');
 		const file = await this.#handle.getFile();
 		return BigInt(file.size);
 	}
 	lock(lock_level) {
-		console.log(this.#handle.name, 'lock', lock_level);
+		// console.log(this.#handle.name, 'lock', lock_level);
 		if (this.#lock?.mode == 'exclusive') return true;
 
 		return new Promise(ret => {
@@ -94,7 +94,7 @@ class OpfsFile extends VfsFile {
 		});
 	}
 	unlock(lock_level) {
-		console.log(this.#handle.name, 'unlock', lock_level);
+		// console.log(this.#handle.name, 'unlock', lock_level);
 		if (lock_level == 0) {
 			this.#lock.release();
 			this.#lock = false;
@@ -105,7 +105,7 @@ class OpfsFile extends VfsFile {
 	}
 	sector_size() { return 1; }
 	device_characteristics() {
-		console.log(this.#handle.name, 'iocap');
+		// console.log(this.#handle.name, 'iocap');
 		// return SQLITE_IOCAP_BATCH_ATOMIC | SQLITE_IOCAP_SAFE_APPEND | SQLITE_IOCAP_SEQUENTIAL | SQLITE_IOCAP_UNDELETABLE_WHEN_OPEN;
 		// return 0;
 		// return SQLITE_IOCAP_ATOMIC | SQLITE_IOCAP_SAFE_APPEND | SQLITE_IOCAP_SEQUENTIAL | SQLITE_IOCAP_BATCH_ATOMIC;
@@ -118,17 +118,17 @@ class OpfsFile extends VfsFile {
 export default class Opfs extends Vfs {
 	name = 'opfs';
 	async open(filename, flags) {
-		console.log(filename, 'open', flags);
+		// console.log(filename, 'open', flags);
 		const create = flags & SQLITE_OPEN_CREATE;
 		const handle = await dir.getFileHandle(filename, { create });
 		return new OpfsFile(handle, flags);
 	}
 	async delete(filename, sync) {
-		console.log(filename, 'delete', sync);
+		// console.log(filename, 'delete', sync);
 		await dir.removeEntry(filename);
 	}
 	async access(filename, flags) {
-		console.log(filename, 'access', flags);
+		// console.log(filename, 'access', flags);
 		if (flags == SQLITE_ACCESS_EXISTS) {
 			try {
 				await dir.getFileHandle(filename);
