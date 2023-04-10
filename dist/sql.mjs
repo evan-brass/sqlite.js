@@ -70,11 +70,8 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 				file_impls.set(file_out, file);
 				file_vfs.set(file_out, impl);
 				
-				const io_methods = await sqlite3.get_io_methods();
 				const flags_out_dv = sqlite3.memory.dv(flags_out, 4);
 				(flags_out_dv.setInt32(0, file.flags, true), await flags_out_dv.store());
-				const file_out_dv = sqlite3.memory.dv(file_out, 4);
-				(file_out_dv.setInt32(0, io_methods, true), await file_out_dv.store());
 				
 				return SQLITE_OK;
 			} catch (e) {

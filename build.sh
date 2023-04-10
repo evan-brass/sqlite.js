@@ -23,7 +23,7 @@ wasi-sdk-20.0/bin/wasm-ld \
 	-lclang_rt.builtins-wasm32 \
 	-lc \
 	--no-entry \
-	--export=allocate_vfs --export=get_io_methods --export=set_logging \
+	--export=allocate_vfs --export=set_logging \
 	--export=malloc --export=free --export=realloc \
 	--export=sqlite3_aggregate_context \
 	--export=sqlite3_auto_extension \

@@ -23,33 +23,6 @@ __attribute__((import_module("vfs"), import_name("xFileControl"))) int js_xFileC
 __attribute__((import_module("vfs"), import_name("xSectorSize"))) int js_xSectorSize(sqlite3_file*);
 __attribute__((import_module("vfs"), import_name("xDeviceCharacteristics"))) int js_xDeviceCharacteristics(sqlite3_file*);
 
-__attribute__((export_name("allocate_vfs"))) sqlite3_vfs* allocate_vfs(const char* zName, int mxPathname) {
-	sqlite3_vfs* ret = malloc(sizeof(sqlite3_vfs));
-	if (ret == NULL) { return ret; }
-
-	ret->iVersion = 2;
-	ret->szOsFile = sizeof(sqlite3_file);
-	ret->mxPathname = mxPathname;
-	ret->pNext = NULL;
-	ret->zName = zName;
-	ret->pAppData = NULL;
-	ret->xOpen = js_xOpen;
-	ret->xDelete = js_xDelete;
-	ret->xAccess = js_xAccess;
-	ret->xFullPathname = js_xFullPathname;
-	ret->xDlOpen = NULL;
-	ret->xDlError = NULL;
-	ret->xDlSym = NULL;
-	ret->xDlClose = NULL;
-	ret->xRandomness = js_xRandomness;
-	ret->xSleep = js_xSleep;
-	ret->xCurrentTime = NULL;
-	ret->xGetLastError = js_xGetLastError;
-	ret->xCurrentTimeInt64 = js_xCurrentTimeInt64;
-
-	return ret;
-}
-
 static sqlite3_io_methods IoMethods = {
 	1,
 	js_xClose,
@@ -72,8 +45,37 @@ static sqlite3_io_methods IoMethods = {
 	NULL
 };
 
-__attribute__((export_name("get_io_methods"))) sqlite3_io_methods* get_io_methods() {
-	return &IoMethods;
+// The only thing we do is set the io_methods for the file_out
+int xOpen(sqlite3_vfs* vfs, const char* filename, sqlite3_file* file_out, int flags, int* flags_out) {
+	file_out->pMethods = &IoMethods;
+	return js_xOpen(vfs, filename, file_out, flags, flags_out);
+}
+
+__attribute__((export_name("allocate_vfs"))) sqlite3_vfs* allocate_vfs(const char* zName, int mxPathname) {
+	sqlite3_vfs* ret = malloc(sizeof(sqlite3_vfs));
+	if (ret == NULL) { return ret; }
+
+	ret->iVersion = 2;
+	ret->szOsFile = sizeof(sqlite3_file);
+	ret->mxPathname = mxPathname;
+	ret->pNext = NULL;
+	ret->zName = zName;
+	ret->pAppData = NULL;
+	ret->xOpen = xOpen;
+	ret->xDelete = js_xDelete;
+	ret->xAccess = js_xAccess;
+	ret->xFullPathname = js_xFullPathname;
+	ret->xDlOpen = NULL;
+	ret->xDlError = NULL;
+	ret->xDlSym = NULL;
+	ret->xDlClose = NULL;
+	ret->xRandomness = js_xRandomness;
+	ret->xSleep = js_xSleep;
+	ret->xCurrentTime = NULL;
+	ret->xGetLastError = js_xGetLastError;
+	ret->xCurrentTimeInt64 = js_xCurrentTimeInt64;
+
+	return ret;
 }
 
 __attribute__((export_name("set_logging"))) void set_logging() {
