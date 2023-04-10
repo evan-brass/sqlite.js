@@ -4,7 +4,7 @@ import {
 	SQLITE_ROW, SQLITE_DONE,
 	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ,
 	SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
-	SQLITE_INTEGER, SQLITE_FLOAT, SQLITE3_TEXT, SQLITE_BLOB, SQLITE_NULL
+	SQLITE_INTEGER, SQLITE_FLOAT, SQLITE3_TEXT, SQLITE_BLOB, SQLITE_NULL, SQLITE_TRANSIENT
 } from "./sqlite_def.mjs";
 import spawn_in_worker from "./vm.mjs";
 
@@ -152,6 +152,7 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 			const res = impl.current_time();
 			const out_dv = sqlite3.memory.dv(out_ptr, 8);
 			(out_dv.setBigInt64(0, res, true), await out_dv.store());
+			return SQLITE_OK;
 		},
 		async xClose(file) {
 			const impl = file_impls.get(file);
@@ -375,15 +376,16 @@ export default async function connect(pathname, flags = SQLITE_OPEN_CREATE | SQL
 	return async function* sql(strings, ...args) {
 		// Concat the strings:
 		let concat = strings[0];
-		const named_args = [];
+		const named_args = {};
+		const unnamed_args = [];
 		for (let i = 0; i < args.length; ++i) {
 			const arg = args[i];
 			const str = strings[i + 1];
 			if (typeof arg == 'object' && arg !== null && !(arg instanceof ArrayBuffer)) {
-				named_args.push(arg);
-			}
-			if (typeof arg != 'object' && !(arg instanceof Blob || arg instanceof ArrayBuffer /* TODO: More valid object bindings */)) {
+				Object.assign(named_args, arg);
+			} else {
 				concat += '?';
+				unnamed_args.push(arg);
 			}
 			concat += str;
 		}
@@ -406,6 +408,35 @@ export default async function connect(pathname, flags = SQLITE_OPEN_CREATE | SQL
 					const res = await sqlite3.sqlite3_prepare_v2(conn, sql_ptr, remainder, stmt_dv.ptr, sql_end_dv.ptr);
 					stmt = (await stmt_dv.load(), stmt_dv.getInt32(0, true));
 					await handle_error(res, conn);
+
+					const num_params = await sqlite3.sqlite3_bind_parameter_count(stmt);
+					for (let i = 1; i <= num_params; ++i) {
+						const arg_name_ptr = await sqlite3.sqlite3_bind_parameter_name(stmt, i);
+						let arg;
+						if (arg_name_ptr == 0) {
+							arg = unnamed_args.shift();
+						} else {
+							const name = await read_str(arg_name_ptr);
+							const key = name.substring(1);
+							arg = named_args[key];
+						}
+						let res;
+						if (typeof arg == 'boolean') arg = arg ? 1 : 0;
+						if (typeof arg == 'bigint') {
+							res = await sqlite3.sqlite3_bind_int64(stmt, i, arg);
+						}
+						else if (typeof arg == 'number') {
+							res = await sqlite3.sqlite3_bind_double(stmt, i, arg);
+						}
+						else if (typeof arg == 'string') {
+							const ptr = await alloc_str(arg);
+							if (!ptr) throw new Error('OOM');
+							res = await sqlite3.sqlite3_bind_text(stmt, i, ptr, -1, SQLITE_TRANSIENT);
+							await sqlite3.free(ptr);
+						}
+						await handle_error(res);
+					}
+					console.log(num_params);
 
 					while (1) {
 						if (!stmt) break;
@@ -466,4 +497,11 @@ export async function exec(sql) {
 	let last_row;
 	for await (const row of sql) { last_row = row; }
 	return last_row;
+}
+export async function rows(sql) {
+	const ret = [];
+	for await(const row of sql) {
+		ret.push(row);
+	}
+	return ret;
 }

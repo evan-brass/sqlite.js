@@ -1,4 +1,4 @@
-rm dist/*.wasm dist/*.wat obj/*
+rm dist/*.wasm dist/*.wat dist/*.wasm.gz obj/*
 mkdir obj
 
 wasi-sdk-20.0/bin/clang \
@@ -44,7 +44,6 @@ wasi-sdk-20.0/bin/wasm-ld \
 	--export=sqlite3_bind_parameter_name \
 	--export=sqlite3_bind_pointer \
 	--export=sqlite3_bind_text \
-	--export=sqlite3_bind_text16 \
 	--export=sqlite3_bind_text64 \
 	--export=sqlite3_bind_value \
 	--export=sqlite3_bind_zeroblob \
@@ -64,31 +63,24 @@ wasi-sdk-20.0/bin/wasm-ld \
 	--export=sqlite3_close \
 	--export=sqlite3_close_v2 \
 	--export=sqlite3_collation_needed \
-	--export=sqlite3_collation_needed16 \
 	--export=sqlite3_column_blob \
 	--export=sqlite3_column_bytes \
-	--export=sqlite3_column_bytes16 \
 	--export=sqlite3_column_count \
 	--export=sqlite3_column_double \
 	--export=sqlite3_column_int \
 	--export=sqlite3_column_int64 \
 	--export=sqlite3_column_name \
-	--export=sqlite3_column_name16 \
 	--export=sqlite3_column_text \
-	--export=sqlite3_column_text16 \
 	--export=sqlite3_column_type \
 	--export=sqlite3_column_value \
 	--export=sqlite3_commit_hook \
 	--export=sqlite3_complete \
-	--export=sqlite3_complete16 \
 	--export=sqlite3_config \
 	--export=sqlite3_context_db_handle \
 	--export=sqlite3_create_collation \
-	--export=sqlite3_create_collation16 \
 	--export=sqlite3_create_collation_v2 \
 	--export=sqlite3_create_filename \
 	--export=sqlite3_create_function \
-	--export=sqlite3_create_function16 \
 	--export=sqlite3_create_function_v2 \
 	--export=sqlite3_create_module \
 	--export=sqlite3_create_module_v2 \
@@ -105,11 +97,9 @@ wasi-sdk-20.0/bin/wasm-ld \
 	--export=sqlite3_db_release_memory \
 	--export=sqlite3_db_status \
 	--export=sqlite3_declare_vtab \
-	--export=sqlite3_deserialize \
 	--export=sqlite3_drop_modules \
 	--export=sqlite3_errcode \
 	--export=sqlite3_errmsg \
-	--export=sqlite3_errmsg16 \
 	--export=sqlite3_error_offset \
 	--export=sqlite3_errstr \
 	--export=sqlite3_exec \
@@ -123,10 +113,8 @@ wasi-sdk-20.0/bin/wasm-ld \
 	--export=sqlite3_finalize \
 	--export=sqlite3_free \
 	--export=sqlite3_free_filename \
-	--export=sqlite3_free_table \
 	--export=sqlite3_get_autocommit \
 	--export=sqlite3_get_auxdata \
-	--export=sqlite3_get_table \
 	--export=sqlite3_hard_heap_limit64 \
 	--export=sqlite3_initialize \
 	--export=sqlite3_interrupt \
@@ -147,16 +135,11 @@ wasi-sdk-20.0/bin/wasm-ld \
 	--export=sqlite3_msize \
 	--export=sqlite3_next_stmt \
 	--export=sqlite3_open \
-	--export=sqlite3_open16 \
 	--export=sqlite3_open_v2 \
 	--export=sqlite3_overload_function \
 	--export=sqlite3_prepare \
-	--export=sqlite3_prepare16 \
-	--export=sqlite3_prepare16_v2 \
-	--export=sqlite3_prepare16_v3 \
 	--export=sqlite3_prepare_v2 \
 	--export=sqlite3_prepare_v3 \
-	--export=sqlite3_progress_handler \
 	--export=sqlite3_randomness \
 	--export=sqlite3_realloc \
 	--export=sqlite3_realloc64 \
@@ -167,7 +150,6 @@ wasi-sdk-20.0/bin/wasm-ld \
 	--export=sqlite3_result_blob64 \
 	--export=sqlite3_result_double \
 	--export=sqlite3_result_error \
-	--export=sqlite3_result_error16 \
 	--export=sqlite3_result_error_code \
 	--export=sqlite3_result_error_nomem \
 	--export=sqlite3_result_error_toobig \
@@ -177,15 +159,11 @@ wasi-sdk-20.0/bin/wasm-ld \
 	--export=sqlite3_result_pointer \
 	--export=sqlite3_result_subtype \
 	--export=sqlite3_result_text \
-	--export=sqlite3_result_text16 \
-	--export=sqlite3_result_text16be \
-	--export=sqlite3_result_text16le \
 	--export=sqlite3_result_text64 \
 	--export=sqlite3_result_value \
 	--export=sqlite3_result_zeroblob \
 	--export=sqlite3_result_zeroblob64 \
 	--export=sqlite3_rollback_hook \
-	--export=sqlite3_serialize \
 	--export=sqlite3_set_authorizer \
 	--export=sqlite3_set_auxdata \
 	--export=sqlite3_set_last_insert_rowid \
@@ -222,7 +200,6 @@ wasi-sdk-20.0/bin/wasm-ld \
 	--export=sqlite3_threadsafe \
 	--export=sqlite3_total_changes \
 	--export=sqlite3_total_changes64 \
-	--export=sqlite3_trace_v2 \
 	--export=sqlite3_txn_state \
 	--export=sqlite3_update_hook \
 	--export=sqlite3_uri_boolean \
@@ -232,7 +209,6 @@ wasi-sdk-20.0/bin/wasm-ld \
 	--export=sqlite3_user_data \
 	--export=sqlite3_value_blob \
 	--export=sqlite3_value_bytes \
-	--export=sqlite3_value_bytes16 \
 	--export=sqlite3_value_double \
 	--export=sqlite3_value_dup \
 	--export=sqlite3_value_encoding \
@@ -245,9 +221,6 @@ wasi-sdk-20.0/bin/wasm-ld \
 	--export=sqlite3_value_pointer \
 	--export=sqlite3_value_subtype \
 	--export=sqlite3_value_text \
-	--export=sqlite3_value_text16 \
-	--export=sqlite3_value_text16be \
-	--export=sqlite3_value_text16le \
 	--export=sqlite3_value_type \
 	--export=sqlite3_version \
 	--export=sqlite3_vfs_find \
@@ -274,8 +247,13 @@ wasm-opt \
 	-o dist/sqlite3_opt.wasm \
 	dist/sqlite3.wasm
 
-wasm-opt \
-	-O4 \
-	--asyncify \
-	-o dist/sqlite3_opt_async.wasm \
-	dist/sqlite3_opt.wasm
+gzip -k dist/sqlite3_opt.wasm
+gzip -k dist/sqlite3.wasm
+
+# wasm-opt \
+# 	-O4 \
+# 	--asyncify \
+# 	-o dist/sqlite3_opt_async.wasm \
+# 	dist/sqlite3_opt.wasm
+
+# gzip -k dist/sqlite3_opt_async.wasm

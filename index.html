@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <script type="module">
-	import connect, { exec, register_vfs } from './dist/sql.mjs';
+	import connect, { register_vfs, exec, rows } from './dist/sql.mjs';
 	import OpfsVfs from './dist/opfs.mjs';
 
 	await register_vfs(new OpfsVfs(), true);
 
+	async function log(sql) {
+		for await (const row of sql) { console.log('row', row); }
+	}
+
 	const sql = await connect('test.db')
-	await exec(sql`SELECT hex(randomblob(16))`)
-	await exec(sql`CREATE TABLE IF NOT EXISTS test(a, b)`)
-	await exec(sql`INSERT INTO test VALUES (5, 9), ('Hello', 'World!')`)
-	await exec(sql`SELECT a FROM test`)
+	window.rows = rows;
+	window.exec = exec;
+	window.sql = sql;
 </script>
