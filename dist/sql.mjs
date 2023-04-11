@@ -46,7 +46,6 @@ export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', impor
 		async logging(_, code, msg_ptr) {
 			const message = await read_str(msg_ptr);
 			console.log(`SQLite(${code}): ${message}`);
-			return 0; // Unused, but this is because every import is required to return a numeric value
 		},
 		async sqlite3_os_init() {
 			// console.log('sqlite3_os_init');

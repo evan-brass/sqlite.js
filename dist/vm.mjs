@@ -83,7 +83,7 @@ export default async function spawn_in_worker(wasm_source, imports, { max_args =
 		});
 	}
 	function ret(val) {
-		write_args([val]);
+		write_args([val ?? 0]);
 		Atomics.store(i32, 0, 2);
 		Atomics.notify(i32, 0);
 	}
