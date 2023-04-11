@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <script type="module">
 	import connect, { register_vfs, exec, rows } from './dist/sql.mjs';
-	import OpfsVfs from './dist/opfs.mjs';
+	import opfs from './dist/opfs.mjs';
 
-	await register_vfs(new OpfsVfs(), true);
+	await register_vfs(opfs, true);
 
 	async function log(sql) {
 		for await (const row of sql) { console.log('row', row); }
 	}
 
-	const sql = await connect('test.db')
+	const sql = await connect('test.db');
 	window.rows = rows;
 	window.exec = exec;
 	window.sql = sql;

@@ -115,7 +115,7 @@ class OpfsFile extends VfsFile {
 	}
 }
 
-export default class Opfs extends Vfs {
+export class Opfs extends Vfs {
 	name = 'opfs';
 	async open(filename, flags) {
 		// console.log(filename, 'open', flags);
@@ -140,3 +140,4 @@ export default class Opfs extends Vfs {
 		throw new Error();
 	}
 }
+export default new Opfs();
