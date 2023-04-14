@@ -3,3 +3,4 @@ dist/*.wasm
 dist/*.wat
 dist/*.wasm.gz
 obj
+Asyncify.txt

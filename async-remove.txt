@@ -1,0 +1,1 @@
+sqlite3_bind*,sqlite3_err*,sqlite3_extended*,sqlite3_filename*,sqlite3_free,sqlite3_initialize,sqlite3_log,sqlite3_malloc*,sqlite3_memory*,sqlite3_msize,sqlite3_next_stmt,sqlite3_randomness,sqlite3_realloc*,sqlite3_str*,sqlite3_value*,sqlite3_vfs_*,sqlite3Malloc,sqlite3Realloc,sqlite3DbFreeNN,sqlite3_result*,

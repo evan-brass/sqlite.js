@@ -1,0 +1,16 @@
+vfs.xOpen
+vfs.xAccess
+vfs.xDelete
+vfs.xSleep
+vfs.xClose
+
+vfs.xRead
+vfs.xWrite
+vfs.xTruncate
+vfs.xSync
+vfs.xFileSize
+vfs.xLock
+vfs.xUnlock
+vfs.xCheckReservedLock
+vfs.xFileControl
+vfs.xDeviceCharacteristics
