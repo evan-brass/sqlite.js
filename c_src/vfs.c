@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include "sqlite3.h"
 
-__attribute__((import_name("logging"))) void js_logging(void*, int, const char*);
+__attribute__((import_name("log"))) void js_log(void*, int, const char*);
 __attribute__((import_module("vfs"), import_name("xOpen"))) int js_xOpen(sqlite3_vfs*, const char*, sqlite3_file*, int, int*);
 __attribute__((import_module("vfs"), import_name("xDelete"))) int js_xDelete(sqlite3_vfs*, const char*, int);
 __attribute__((import_module("vfs"), import_name("xAccess"))) int js_xAccess(sqlite3_vfs*, const char*, int, int*);
@@ -79,5 +79,5 @@ __attribute__((export_name("allocate_vfs"))) sqlite3_vfs* allocate_vfs(const cha
 }
 
 __attribute__((export_name("set_logging"))) void set_logging() {
-	sqlite3_config(SQLITE_CONFIG_LOG, js_logging, NULL);
+	sqlite3_config(SQLITE_CONFIG_LOG, js_log, NULL);
 }

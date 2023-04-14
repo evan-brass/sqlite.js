@@ -43,7 +43,7 @@ export class VfsFile {
 }
 export const sqlite3 = await spawn_in_worker(fetch(new URL('sqlite3.wasm', import.meta.url)), {
 	env: {
-		async logging(_, code, msg_ptr) {
+		async log(_, code, msg_ptr) {
 			const message = await read_str(msg_ptr);
 			console.log(`SQLite(${code}): ${message}`);
 		},
