@@ -2,5 +2,3 @@ wasi-sdk-20.0
 dist/*.wasm
 dist/*.wat
 dist/*.wasm.gz
-obj
-Asyncify.txt

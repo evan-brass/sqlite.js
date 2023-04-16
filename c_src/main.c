@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 #include "sqlite3.h"
 
 __attribute__((import_name("log"))) void js_log(void*, int, const char*);
@@ -51,7 +52,7 @@ int xOpen(sqlite3_vfs* vfs, const char* filename, sqlite3_file* file_out, int fl
 	return js_xOpen(vfs, filename, file_out, flags, flags_out);
 }
 
-__attribute__((export_name("allocate_vfs"))) sqlite3_vfs* allocate_vfs(const char* zName, int mxPathname) {
+__attribute__((visibility("default"))) sqlite3_vfs* allocate_vfs(const char* zName, int mxPathname) {
 	sqlite3_vfs* ret = malloc(sizeof(sqlite3_vfs));
 	if (ret == NULL) { return ret; }
 
@@ -78,6 +79,16 @@ __attribute__((export_name("allocate_vfs"))) sqlite3_vfs* allocate_vfs(const cha
 	return ret;
 }
 
-__attribute__((export_name("set_logging"))) void set_logging() {
+int sqlite3_os_init() {
+	sqlite3_vfs* mem_vfs = allocate_vfs("mem", 16);
+	return sqlite3_vfs_register(mem_vfs, 1);
+}
+int sqlite3_os_end() {
+	return SQLITE_OK;
+}
+
+int main() {
 	sqlite3_config(SQLITE_CONFIG_LOG, js_log, NULL);
+
+	sqlite3_initialize();
 }

@@ -1,3 +1,8 @@
+#ifdef SQLITE_API
+#undef SQLITE_API
+#endif
+#define SQLITE_API __attribute__((visibility("default")))
+
 // === Remove Deprecated ===
 #define SQLITE_DQS 0
 #define SQLITE_LIKE_DOESNT_MATCH_BLOBS
@@ -51,7 +56,4 @@
 #define SQLITE_OMIT_DESERIALIZE
 #define SQLITE_OMIT_GET_TABLE
 #define SQLITE_OMIT_SCHEMA_VERSION_PRAGMAS
-// #define SQLITE_OMIT_AUTOINIT
-
-__attribute__((import_name("sqlite3_os_init"))) int sqlite3_os_init(void);
-__attribute__((import_name("sqlite3_os_end"))) int sqlite3_os_end(void);
+#define SQLITE_OMIT_AUTOINIT
