@@ -275,7 +275,7 @@ export const sqlite3 = instance.exports;
 sqlite3._start();
 
 // Asyncify has a 1024 byte rewind stack, but this is insufficient for SQLite.  Allocate a larger stack:
-const stack_size = 2 ** 16; // This is the value I've been using for debug builds.  A smaller value would likely work for an optimized build.
+const stack_size = 2 ** 15; // This is the value I've been using for debug builds.  A smaller value would likely work for an optimized build.
 const ptr = sqlite3.malloc(stack_size);
 memdv().setInt32(Asyncify.DATA_ADDR, ptr, true);
 memdv().setInt32(Asyncify.DATA_ADDR + 4, ptr + stack_size, true);

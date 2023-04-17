@@ -1,3 +1,51 @@
+export async function instantiateStreaming(source, imports, {stack_size = 1024} = {}) {
+	const module = WebAssembly.compileStreaming(source);
+
+	const import_defs = WebAssembly.Module.imports(module);
+	const export_defs = WebAssembly.Module.exports(module);
+
+	const wrapped_imports = {};
+	for (const {module, name, kind} of import_defs) {
+		wrapped_imports[module] ??= {};
+		wrapped_imports[module][name] = import_stub.bind(undefined, module, name);
+	}
+
+	const { instance } = WebAssembly.instantiate(module, wrapped_imports);
+
+	const stacks = [];
+	function allocate_stack() {
+		const ptr = instance.exports.malloc(stack_size);
+
+	}
+
+	function import_stub(module, name, ...args) {
+		
+	}
+}
+
+export default async function asyncify(source, imports, { stack_size, stack_count } = {}) {
+	if (!(source instanceof WebAssembly.Module)) {
+		source = await WebAssembly.compileStreaming(source);
+	}
+	const import_defs = WebAssembly.Module.imports(source);
+	const export_defs = WebAssembly.Module.exports(source);
+
+	const wrapped_imports = {};
+	for (const {kind, module, name} of import_defs) {
+		wrapped_imports[module] ??= {};
+		if (kind == 'function') {
+			wrapped_imports[module][name] = function wrapper(...args) {
+
+			};
+		} else {
+			wrapped_imports[module][name] = imports[module][name];
+		}
+	}
+
+}
+
+
+
 /**
  * Copyright 2019 Google Inc. All Rights Reserved.
  *
