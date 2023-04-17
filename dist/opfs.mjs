@@ -3,6 +3,8 @@ import { SQLITE_OK, SQLITE_ACCESS_EXISTS, SQLITE_FCNTL_BEGIN_ATOMIC_WRITE, SQLIT
 
 const dir = await navigator.storage.getDirectory();
 
+// TODO: Support openning files in subfolders of the OPFS
+
 class OpfsFile extends VfsFile {
 	#handle;
 	#lock;

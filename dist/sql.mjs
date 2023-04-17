@@ -1,4 +1,4 @@
-import * as Asyncify from './asyncify.mjs';
+import asyncify from './asyncify.mjs';
 import { 
 	SQLITE_OK,
 	SQLITE_CANTOPEN, SQLITE_NOTFOUND,
@@ -38,7 +38,7 @@ export class VfsFile {
 	file_control(op, arg) { return SQLITE_NOTFOUND; }
 	device_characteristics() { return 0; }
 }
-const { instance } = await Asyncify.instantiateStreaming(fetch(new URL('sqlite3.async.wasm', import.meta.url)), {
+export const sqlite3 = await asyncify(fetch(new URL('sqlite3.async.wasm', import.meta.url)), {
 	env: {
 		log(_, code, msg_ptr) {
 			const msg = read_str(msg_ptr);
@@ -268,17 +268,17 @@ const { instance } = await Asyncify.instantiateStreaming(fetch(new URL('sqlite3.
 			return impl.device_characteristics();
 		}
 	}
+}, {
+	// This is the value I've been using for debug builds.  A smaller value would likely work for an optimized build:
+	stack_size: 2 ** 15
 });
-export const sqlite3 = instance.exports;
+sqlite3._start(); // Call the main function
 
-// Call the main function:
-sqlite3._start();
-
-// Asyncify has a 1024 byte rewind stack, but this is insufficient for SQLite.  Allocate a larger stack:
-const stack_size = 2 ** 15; // This is the value I've been using for debug builds.  A smaller value would likely work for an optimized build.
-const ptr = sqlite3.malloc(stack_size);
-memdv().setInt32(Asyncify.DATA_ADDR, ptr, true);
-memdv().setInt32(Asyncify.DATA_ADDR + 4, ptr + stack_size, true);
+// // Asyncify has a 1024 byte rewind stack, but this is insufficient for SQLite.  Allocate a larger stack:
+// const stack_size = 2 ** 15; 
+// const ptr = sqlite3.malloc(stack_size);
+// memdv().setInt32(Asyncify.DATA_ADDR, ptr, true);
+// memdv().setInt32(Asyncify.DATA_ADDR + 4, ptr + stack_size, true);
 
 function mem8(offset, length) {
 	return new Uint8Array(sqlite3.memory.buffer, offset, length);
