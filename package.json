@@ -1,6 +1,6 @@
 {
-	"name": "@evan-brass/sql.mjs",
-	"version": "0.1",
+	"name": "sql.mjs",
+	"version": "0.1.0",
 	"description": "SQLite Compiled to WASM, asyncified, and then wrapped in a little JavaScript.",
 	"keywords": ["SQLite", "database", "origin private file system"],
 	"files": [
