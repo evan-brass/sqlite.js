@@ -1,0 +1,14 @@
+{
+	"name": "@evan-brass/sql.mjs",
+	"version": "0.1",
+	"description": "SQLite Compiled to WASM, asyncified, and then wrapped in a little JavaScript.",
+	"keywords": ["SQLite", "database", "origin private file system"],
+	"files": [
+		"dist/*"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/evan-brass/sql.mjs"
+	},
+	"license": "MIT-0"
+}
