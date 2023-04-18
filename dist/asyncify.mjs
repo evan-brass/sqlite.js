@@ -11,7 +11,7 @@ export class OutOfMemError extends Error {
 	}
 }
 
-function is_promise(val) {
+export function is_promise(val) {
 	return ['object', 'function'].includes(typeof val) && typeof val?.then == 'function';
 }
 

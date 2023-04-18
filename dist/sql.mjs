@@ -1,11 +1,12 @@
-import asyncify from './asyncify.mjs';
-import { 
+import asyncify, { OutOfMemError } from './asyncify.mjs';
+import {
 	SQLITE_OK,
-	SQLITE_CANTOPEN, SQLITE_NOTFOUND,
+	SQLITE_NOTFOUND,
 	SQLITE_ROW, SQLITE_DONE,
 	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ,
 	SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
-	SQLITE_INTEGER, SQLITE_FLOAT, SQLITE3_TEXT, SQLITE_BLOB, SQLITE_NULL, SQLITE_TRANSIENT
+	SQLITE_INTEGER, SQLITE_FLOAT, SQLITE3_TEXT, SQLITE_BLOB, SQLITE_NULL,
+	SQLITE_TRANSIENT
 } from "./sqlite_def.mjs";
 
 const encoder = new TextEncoder();
@@ -15,6 +16,7 @@ const vfs_impls = new Map();
 const last_errors = new Map();
 const file_impls = new Map();
 const file_vfs = new Map();
+export const funcs = [];
 export class Vfs {
 	name = "mem";
 	max_pathname = 64;
@@ -43,6 +45,27 @@ export const sqlite3 = await asyncify(fetch(new URL('sqlite3.async.wasm', import
 		log(_, code, msg_ptr) {
 			const msg = read_str(msg_ptr);
 			console.log(`SQLite(${code}): ${msg}`);
+		}
+	},
+	func: {
+		async xFunc(ctx_ptr, num_args, args_ptr) {
+			const i = sqlite3.sqlite3_user_data(ctx_ptr);
+			const f = funcs[i];
+			const args = [];
+			const dv = memdv();
+			for (let i = 0; i < num_args; ++i) {
+				const value_ptr = dv.getInt32(args_ptr + 4 * i, true);
+				args[i] = value2js(value_ptr);
+			}
+
+			try {
+				// TODO: Make xFunc not always async
+				const res = await f(...args);
+
+				debugger;
+			} catch (e) {
+				// Set the error on the context
+			}
 		}
 	},
 	vfs: {
@@ -274,11 +297,26 @@ export const sqlite3 = await asyncify(fetch(new URL('sqlite3.async.wasm', import
 });
 sqlite3._start(); // Call the main function
 
-// // Asyncify has a 1024 byte rewind stack, but this is insufficient for SQLite.  Allocate a larger stack:
-// const stack_size = 2 ** 15; 
-// const ptr = sqlite3.malloc(stack_size);
-// memdv().setInt32(Asyncify.DATA_ADDR, ptr, true);
-// memdv().setInt32(Asyncify.DATA_ADDR + 4, ptr + stack_size, true);
+export function value2js(value_ptr) {
+	const type = sqlite3.sqlite3_value_type(value_ptr);
+	if (type == SQLITE_INTEGER) {
+		return sqlite3.sqlite3_value_int64(value_ptr);
+	}
+	else if (type == SQLITE_FLOAT) {
+		return sqlite3.sqlite3_value_double(value_ptr);
+	}
+	else if (type == SQLITE_BLOB) {
+		const len = sqlite3.sqlite3_value_bytes(value_ptr);
+		return mem8(sqlite3.sqlite3_value_blob(value_ptr), len);
+	}
+	else if (type == SQLITE_NULL) {
+		return null;
+	}
+	else if (type == SQLITE3_TEXT) {
+		const len = sqlite3.sqlite3_value_bytes(value_ptr);
+		return read_str(sqlite3.sqlite3_value_text(value_ptr), len);
+	}
+}
 
 function mem8(offset, length) {
 	return new Uint8Array(sqlite3.memory.buffer, offset, length);
@@ -316,6 +354,7 @@ function handle_error(code, conn) {
 	const msg = read_str(ptr);
 	throw new Error(`SQLite Error(${code}): ${msg}`);
 }
+
 export function register_vfs(vfs_impl, make_default = false) {
 	const name_ptr = alloc_str(vfs_impl.name);
 	const vfs_ptr = sqlite3.allocate_vfs(name_ptr, vfs_impl.max_pathname);
@@ -327,13 +366,27 @@ export function register_vfs(vfs_impl, make_default = false) {
 	handle_error(res);
 }
 
-export default async function connect(pathname, flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_EXRESCODE) {
+export function create_scalar_func(conn, func, {flags = 0, nArgs = func.length} = {}) {
+	const name_ptr = alloc_str(func.name);
+	const res = sqlite3.create_scalar_function(
+		conn,
+		name_ptr,
+		nArgs,
+		flags,
+		funcs.length
+	);
+	handle_error(res);
+
+	funcs.push(func);
+}
+
+export async function open(pathname, flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_EXRESCODE) {
 	let pathname_ptr, conn_ptr;
 	let conn;
 	try {
 		pathname_ptr = alloc_str(pathname);
 		conn_ptr = sqlite3.malloc(4);
-		if (!pathname_ptr || !conn_ptr) return;
+		if (!pathname_ptr || !conn_ptr) throw new OutOfMemError();
 		const res = await sqlite3.sqlite3_open_v2(pathname_ptr, conn_ptr, flags, 0);
 		conn = memdv().getInt32(conn_ptr, true);
 		handle_error(res);
@@ -344,7 +397,41 @@ export default async function connect(pathname, flags = SQLITE_OPEN_CREATE | SQL
 		sqlite3.free(pathname_ptr);
 		sqlite3.free(conn_ptr);
 	}
+	return conn;
+}
+export async function* stmts(conn, sql) {
+	const sql_ptr = alloc_str(sql);
+	const sql_len = sqlite3.strlen(sql_ptr);
+	const sql_end_ptr = sqlite3.malloc(4);
+	const stmt_ptr = sqlite3.malloc(4);
+	try {
+		if (!sql_ptr || !sql_end_ptr || !stmt_ptr) throw new OutOfMemError();
+		memdv().setInt32(sql_end_ptr, sql_ptr, true);
+		const sql_end = sql_ptr + sql_len;
 
+		while (1) {
+			const sql_ptr = memdv().getInt32(sql_end_ptr, true);
+			const remainder = sql_end - sql_ptr;
+			if (remainder <= 1) break;
+
+			let stmt;
+			try {
+				const res = await sqlite3.sqlite3_prepare_v2(conn, sql_ptr, remainder, stmt_ptr, sql_end_ptr);
+				stmt = memdv().getInt32(stmt_ptr, true);
+				handle_error(res, conn);
+
+				yield stmt;
+			} finally {
+				sqlite3.sqlite3_finalize(stmt);
+			}
+		}
+	} finally {
+		sqlite3.free(sql_ptr);
+		sqlite3.free(sql_end_ptr);
+		sqlite3.free(stmt_ptr);
+	}
+}
+export function make_sql(conn, row_format = 'array') {
 	return async function* sql(strings, ...args) {
 		// Concat the strings:
 		let concat = strings[0];
@@ -361,109 +448,82 @@ export default async function connect(pathname, flags = SQLITE_OPEN_CREATE | SQL
 			}
 			concat += str;
 		}
-		const sql_ptr = alloc_str(concat);
-		const sql_len = sqlite3.strlen(sql_ptr);
-		const sql_end_ptr = sqlite3.malloc(4);
-		const stmt_ptr = sqlite3.malloc(4);
-		try {
-			if (!sql_ptr || !sql_end_ptr || !stmt_ptr) throw new Error('OOM');
-			memdv().setInt32(sql_end_ptr, sql_ptr, true);
-			const sql_end = sql_ptr + sql_len;
-
+		for await (const stmt of stmts(conn, concat)) {
+			const num_params = sqlite3.sqlite3_bind_parameter_count(stmt);
+			for (let i = 1; i <= num_params; ++i) {
+				const arg_name_ptr = sqlite3.sqlite3_bind_parameter_name(stmt, i);
+				let arg;
+				if (arg_name_ptr == 0) {
+					arg = unnamed_args.shift();
+				} else {
+					const name = read_str(arg_name_ptr);
+					const key = name.substring(1);
+					arg = named_args[key];
+				}
+				let res;
+				if (typeof arg == 'boolean') arg = arg ? 1 : 0;
+				if (typeof arg == 'bigint') {
+					res = sqlite3.sqlite3_bind_int64(stmt, i, arg);
+				}
+				else if (typeof arg == 'number') {
+					res = sqlite3.sqlite3_bind_double(stmt, i, arg);
+				}
+				else if (typeof arg == 'string') {
+					const ptr = alloc_str(arg);
+					if (!ptr) throw new Error('OOM');
+					res = sqlite3.sqlite3_bind_text(stmt, i, ptr, -1, SQLITE_TRANSIENT);
+					sqlite3.free(ptr);
+				}
+				handle_error(res);
+			}
+			// console.log(num_params);
+	
 			while (1) {
-				const sql_ptr = memdv().getInt32(sql_end_ptr, true);
-				const remainder = sql_end - sql_ptr;
-				if (remainder <= 1) break;
-
-				let stmt;
-				try {
-					const res = await sqlite3.sqlite3_prepare_v2(conn, sql_ptr, remainder, stmt_ptr, sql_end_ptr);
-					stmt = memdv().getInt32(stmt_ptr, true);
-					handle_error(res, conn);
-
-					const num_params = sqlite3.sqlite3_bind_parameter_count(stmt);
-					for (let i = 1; i <= num_params; ++i) {
-						const arg_name_ptr = sqlite3.sqlite3_bind_parameter_name(stmt, i);
-						let arg;
-						if (arg_name_ptr == 0) {
-							arg = unnamed_args.shift();
-						} else {
-							const name = read_str(arg_name_ptr);
-							const key = name.substring(1);
-							arg = named_args[key];
+				if (!stmt) break;
+				const res = await sqlite3.sqlite3_step(stmt);
+				handle_error(res, conn);
+	
+				if (res == SQLITE_ROW) {
+					const data_len = sqlite3.sqlite3_data_count(stmt);
+					const data = [];
+					for (let i = 0; i < data_len; ++i) {
+						const type = sqlite3.sqlite3_column_type(stmt, i);
+						function is_safe(int) {
+							return (BigInt(Number.MIN_SAFE_INTEGER) < int) &&
+								(int < BigInt(Number.MAX_SAFE_INTEGER));
 						}
-						let res;
-						if (typeof arg == 'boolean') arg = arg ? 1 : 0;
-						if (typeof arg == 'bigint') {
-							res = sqlite3.sqlite3_bind_int64(stmt, i, arg);
-						}
-						else if (typeof arg == 'number') {
-							res = sqlite3.sqlite3_bind_double(stmt, i, arg);
-						}
-						else if (typeof arg == 'string') {
-							const ptr = alloc_str(arg);
-							if (!ptr) throw new Error('OOM');
-							res = sqlite3.sqlite3_bind_text(stmt, i, ptr, -1, SQLITE_TRANSIENT);
-							sqlite3.free(ptr);
-						}
-						handle_error(res);
-					}
-					console.log(num_params);
-
-					while (1) {
-						if (!stmt) break;
-						const res = await sqlite3.sqlite3_step(stmt);
-						handle_error(res, conn);
-
-						if (res == SQLITE_ROW) {
-							const data_len = sqlite3.sqlite3_data_count(stmt);
-							const data = [];
-							for (let i = 0; i < data_len; ++i) {
-								const type = sqlite3.sqlite3_column_type(stmt, i);
-								function is_safe(int) {
-									return (BigInt(Number.MIN_SAFE_INTEGER) < int) &&
-										(int < BigInt(Number.MAX_SAFE_INTEGER));
-								}
-								if (type == SQLITE_INTEGER) {
-									const int = sqlite3.sqlite3_column_int64(stmt, i);
-									if (is_safe(int)) {
-										data[i] = Number(int);
-									} else {
-										data[i] = int;
-									}
-								}
-								else if (type == SQLITE_FLOAT) {
-									data[i] = sqlite3.sqlite3_column_double(stmt, i);
-								}
-								else if (type == SQLITE3_TEXT) {
-									const len = sqlite3.sqlite3_column_bytes(stmt, i);
-									data[i] = read_str(sqlite3.sqlite3_column_text(stmt, i), len);
-								}
-								else if (type == SQLITE_BLOB) {
-									const len = sqlite3.sqlite3_column_bytes(stmt, i);
-									data[i] = mem8(sqlite3.sqlite3_column_blob(stmt, i), len).slice();
-								}
-								else if (type == SQLITE_NULL) {
-									data[i] = null;
-								}
-								else { throw new Error(); }
+						if (type == SQLITE_INTEGER) {
+							const int = sqlite3.sqlite3_column_int64(stmt, i);
+							if (is_safe(int)) {
+								data[i] = Number(int);
+							} else {
+								data[i] = int;
 							}
-							yield data;
 						}
-						else if (res == SQLITE_DONE) {
-							break;
+						else if (type == SQLITE_FLOAT) {
+							data[i] = sqlite3.sqlite3_column_double(stmt, i);
 						}
+						else if (type == SQLITE3_TEXT) {
+							const len = sqlite3.sqlite3_column_bytes(stmt, i);
+							data[i] = read_str(sqlite3.sqlite3_column_text(stmt, i), len);
+						}
+						else if (type == SQLITE_BLOB) {
+							const len = sqlite3.sqlite3_column_bytes(stmt, i);
+							data[i] = mem8(sqlite3.sqlite3_column_blob(stmt, i), len).slice();
+						}
+						else if (type == SQLITE_NULL) {
+							data[i] = null;
+						}
+						else { throw new Error(); }
 					}
-				} finally {
-					sqlite3.sqlite3_finalize(stmt);
+					yield data;
+				}
+				else if (res == SQLITE_DONE) {
+					break;
 				}
 			}
-		} finally {
-			sqlite3.free(sql_ptr);
-			sqlite3.free(sql_end_ptr);
-			sqlite3.free(stmt_ptr);
 		}
-	}
+	};
 }
 export async function exec(sql) {
 	let last_row;

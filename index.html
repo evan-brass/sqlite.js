@@ -1,16 +1,18 @@
 <!DOCTYPE html>
 <script type="module">
-	import connect, { register_vfs, exec, rows } from './dist/sql.mjs';
+	import { register_vfs, open, create_scalar_func, make_sql, rows } from './dist/sql.mjs';
+	import { SQLITE_DETERMINISTIC } from './dist/sqlite_def.mjs';
 	import opfs from './dist/opfs.mjs';
 
-	await register_vfs(opfs, true);
+	register_vfs(opfs, true);
 
-	async function log(sql) {
-		for await (const row of sql) { console.log('row', row); }
-	}
+	const conn = await open('test.db');
+	create_scalar_func(conn, function test_func() { return "Big Heccin Cheers!"; }, {flags: SQLITE_DETERMINISTIC, nArgs: -1});
+	create_scalar_func(conn, async function test_async() {
+		await new Promise(res => setTimeout(res, 1000));
+		return 5;
+	});
+	const sql = make_sql(conn);
 
-	const sql = await connect('test.db');
-	window.rows = rows;
-	window.exec = exec;
-	window.sql = sql;
+	console.log(await rows(sql`SELECT test_func(randomblob(9))`));
 </script>

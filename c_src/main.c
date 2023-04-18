@@ -23,6 +23,7 @@ __attribute__((import_module("vfs"), import_name("xCheckReservedLock"))) int js_
 __attribute__((import_module("vfs"), import_name("xFileControl"))) int js_xFileControl(sqlite3_file*, int, void*);
 __attribute__((import_module("vfs"), import_name("xSectorSize"))) int js_xSectorSize(sqlite3_file*);
 __attribute__((import_module("vfs"), import_name("xDeviceCharacteristics"))) int js_xDeviceCharacteristics(sqlite3_file*);
+__attribute__((import_module("func"), import_name("xFunc"))) void js_xFunc(sqlite3_context*, int, sqlite3_value**);
 
 static sqlite3_io_methods IoMethods = {
 	1,
@@ -77,6 +78,20 @@ __attribute__((visibility("default"))) sqlite3_vfs* allocate_vfs(const char* zNa
 	ret->xCurrentTimeInt64 = js_xCurrentTimeInt64;
 
 	return ret;
+}
+
+__attribute__((visibility("default"))) int create_scalar_function(sqlite3* db, const char* name, int nArgs, int flags, void* pApp) {
+	return sqlite3_create_function_v2(
+		db,
+		name,
+		nArgs,
+		SQLITE_UTF8 | flags,
+		pApp,
+		js_xFunc,
+		NULL,
+		NULL,
+		NULL
+	);
 }
 
 int sqlite3_os_init() {
