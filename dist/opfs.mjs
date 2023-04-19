@@ -1,11 +1,17 @@
-import { Vfs, VfsFile } from './sql.mjs';
-import { SQLITE_OK, SQLITE_ACCESS_EXISTS, SQLITE_FCNTL_BEGIN_ATOMIC_WRITE, SQLITE_FCNTL_COMMIT_ATOMIC_WRITE, SQLITE_FCNTL_ROLLBACK_ATOMIC_WRITE, SQLITE_IOCAP_ATOMIC, SQLITE_IOCAP_BATCH_ATOMIC, SQLITE_NOTFOUND, SQLITE_OPEN_CREATE, SQLITE_OPEN_DELETEONCLOSE } from './sqlite_def.mjs';
+import { Vfs, VfsFile } from './vfs.mjs';
+import {
+	SQLITE_OK,
+	SQLITE_ACCESS_EXISTS,
+	SQLITE_FCNTL_BEGIN_ATOMIC_WRITE, SQLITE_FCNTL_COMMIT_ATOMIC_WRITE, SQLITE_FCNTL_ROLLBACK_ATOMIC_WRITE,
+	SQLITE_IOCAP_ATOMIC, SQLITE_IOCAP_BATCH_ATOMIC,
+	SQLITE_OPEN_CREATE, SQLITE_OPEN_DELETEONCLOSE
+} from './sqlite_def.mjs';
 
 const dir = await navigator.storage.getDirectory();
 
 // TODO: Support openning files in subfolders of the OPFS
 
-class OpfsFile extends VfsFile {
+export class OpfsFile extends VfsFile {
 	#handle;
 	#lock;
 	#writable = false;
