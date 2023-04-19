@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <script type="module">
-	import { register_vfs, open, create_scalar_func, make_sql, rows } from './dist/sql.mjs';
-	import { SQLITE_DETERMINISTIC } from './dist/sqlite_def.mjs';
-	import opfs from './dist/opfs.mjs';
+	import {
+		register_vfs, open, create_scalar_func, make_sql, rows,
+		SQLITE_DETERMINISTIC,
+		opfs
+	} from './dist/index.mjs';
 
 	register_vfs(opfs, true);
 
