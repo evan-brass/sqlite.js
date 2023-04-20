@@ -103,7 +103,7 @@ export class OpfsFile extends VfsFile {
 	}
 	unlock(lock_level) {
 		// console.log(this.#handle.name, 'unlock', lock_level);
-		if (lock_level == 0) {
+		if (lock_level == 0 && this.#lock) {
 			this.#lock.release();
 			this.#lock = false;
 		}
