@@ -107,3 +107,7 @@ int main() {
 
 	sqlite3_initialize();
 }
+
+__attribute__((visibility("default"))) void* free_ptr() {
+	return &free;
+}
