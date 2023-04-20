@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>sql.mjs - SQLite </title>
+	<style>
+		code {
+			display: inline-block;
+			background-color: #eee;
+			padding: 0.5em;
+		}
+	</style>
+</head>
+<body>
+	<main style="max-width: 80ch; margin: 1em auto">
+		<h1>sql.mjs demo</h1>
+		<p>Current: <output id="dbname">[no db open]</output></p>
+		<p><input id="pathname" type="text" placeholder="filename"><button id="open">Open</button></p>
+		<p><textarea style="box-sizing: border-box; width: 100%; min-height: 10em;" placeholder="SELECT 'Hello World!';"></textarea></p>
+		<button id="eval">Eval</button>
+		<pre style="word-wrap: break-word; white-space: break-spaces; background-color: #eee; padding: 1em; border: 1px solid #aaa;">Output:<br><output id="result"></output></pre>
+		<script type="module">
+			import { open as open_db, sqlite3, register_vfs, opfs, alloc_str, read_str, make_sql, AsObject } from 'https://unpkg.com/sql.mjs@0.3.1';
+			// import { open as open_db, sqlite3, register_vfs, opfs, alloc_str, read_str, make_sql, AsObject } from '/dist/index.mjs';
+
+			let conn = 0, sql;
+			document.querySelector('#eval').onclick = async () => {
+				document.querySelector('#result').innerText = '';
+				try {
+					const res = eval('sql`' + document.querySelector('textarea').value + '`');
+					localStorage.setItem('code', document.querySelector('textarea').value);
+					for await (const row of res) {
+						for (const key in row) {
+							if (row[key] instanceof Uint8Array) row[key] = Array.from(row[key]);
+						}
+						document.querySelector('#result').insertAdjacentText('beforeend', JSON.stringify(row) + '\n');
+					}
+				} catch (e) {
+					document.querySelector('#result').insertAdjacentHTML('beforeend', `<span style="color: red">${e.toString()}</span>`);
+				}
+			};
+
+			document.querySelector('textarea').innerText = localStorage.getItem('code');
+
+			register_vfs(opfs, true); // Enable Origin-Private-File-System database files and make them default
+
+			const main_str = alloc_str('main');
+			async function open(pathname) {
+				sqlite3.sqlite3_close_v2(conn);
+				conn = await open_db(pathname);
+				sql = make_sql(conn);
+
+				const filename_ptr = sqlite3.sqlite3_db_filename(conn, main_str);
+				const filename = read_str(filename_ptr) || ':memory:';
+				document.querySelector('#dbname').innerText = filename;
+
+				localStorage.setItem('pathname', filename);
+			}
+			await open(localStorage.getItem('pathname') || 'test.db');
+			document.querySelector('#open').onclick = () => open(document.querySelector('#pathname').value);
+			document.body.addEventListener('click', e => {
+				if (e.target.matches('code')) {
+					document.querySelector('textarea').innerText = e.target.innerText;
+				}
+			});
+		</script>
+
+		<h2>Examples</h2>
+		<p>A few things you could try playing around with are: (click the code samples)</p>
+		<ul>
+			<li>Syntax errors: <code>syntax error</code></li>
+			<li>Return rows as JS objects instead of arrays: <code>${AsObject} SELECT 'Hello World' AS named;</code></li>
+			<li>Use Date/Time or random functions: <code>SELECT hex(randomblob(20)), date();</code></li>
+			<li>Blob literals are not supported, but you can bind TypedArrays as arguments: <code>SELECT hex(${new Uint8Array([222, 173, 190, 239])});</code></li>
+			<li>Make a table: <code>CREATE TABLE IF NOT EXISTS todo(title TEXT, description TEXT, priority INT);</code></li>
+			<li>Insert some data into that table: <code>INSERT INTO todo VALUES 
+	('go for a walk', '*if it isn''t too cold', 3),
+	('do dishes', '*they would''ve been easier to do yesterday...*', 5),
+	('feed the dog', null, '4.5');</code></li>
+			<li>List your todos: <code>${AsObject} SELECT title, description FROM todo ORDER BY priority DESC;</code></li>
+			<li>Do pragma things: <code>PRAGMA table_list;</code></li>
+			<li>Refresh your browser and see if your data is still there 🤞🏻</li>
+		</ul>
+	</main>
+</body>
+</html>
