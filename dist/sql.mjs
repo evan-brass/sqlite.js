@@ -502,7 +502,7 @@ export function make_sql(conn) {
 						val = is_safe(int) ? Number(int) : int;
 					}
 					else if (type == SQLITE_FLOAT) {
-						val = sqlite3.sqlite3_column_doublt(stmt, i);
+						val = sqlite3.sqlite3_column_double(stmt, i);
 					}
 					else if (type == SQLITE3_TEXT) {
 						const len = sqlite3.sqlite3_column_bytes(stmt, i);
