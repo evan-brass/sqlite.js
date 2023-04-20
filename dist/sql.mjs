@@ -295,13 +295,13 @@ export function value2js(value_ptr) {
 	}
 }
 
-function mem8(offset, length) {
+export function mem8(offset, length) {
 	return new Uint8Array(sqlite3.memory.buffer, offset, length);
 }
-function memdv(offset, length) {
+export function memdv(offset, length) {
 	return new DataView(sqlite3.memory.buffer, offset, length);
 }
-function alloc_str(s) {
+export function alloc_str(s) {
 	if (!s.endsWith('\0')) {
 		s += '\0';
 	}
@@ -311,7 +311,7 @@ function alloc_str(s) {
 	mem8(ptr, encoded.byteLength).set(encoded);
 	return ptr;
 }
-function read_str(ptr, len) {
+export function read_str(ptr, len) {
 	if (!len) len = sqlite3.strlen(ptr);
 	let ret = '';
 	if (len > 0) {
@@ -320,7 +320,7 @@ function read_str(ptr, len) {
 	return ret;
 }
 
-function handle_error(code, conn) {
+export function handle_error(code, conn) {
 	if (code == SQLITE_OK || code == SQLITE_ROW || code == SQLITE_DONE) return;
 	let ptr;
 	if (conn) {

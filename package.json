@@ -14,7 +14,8 @@
 		"origin-private-file-system"
 	],
 	"files": [
-		"dist/*"
+		"dist/*.mjs",
+		"dist/*.async.wasm"
 	],
 	"main": "dist/index.mjs",
 	"repository": {
