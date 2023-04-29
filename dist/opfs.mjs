@@ -34,10 +34,7 @@ export class OpfsFile extends VfsFile {
 			await this.#handle.remove();
 		}
 	}
-	sync() {
-		// console.log(this.#handle.name, 'sync');
-		// Do Nothing.
-	}
+	sync() {/* Do Nothing. */}
 	async read(offset, len) {
 		// console.log(this.#handle.name, 'read', len, 'at', offset);
 		offset = Number(offset);
@@ -114,12 +111,7 @@ export class OpfsFile extends VfsFile {
 	sector_size() { return 1; }
 	device_characteristics() {
 		// console.log(this.#handle.name, 'iocap');
-		// return SQLITE_IOCAP_BATCH_ATOMIC | SQLITE_IOCAP_SAFE_APPEND | SQLITE_IOCAP_SEQUENTIAL | SQLITE_IOCAP_UNDELETABLE_WHEN_OPEN;
-		// return 0;
-		// return SQLITE_IOCAP_ATOMIC | SQLITE_IOCAP_SAFE_APPEND | SQLITE_IOCAP_SEQUENTIAL | SQLITE_IOCAP_BATCH_ATOMIC;
-		// return SQLITE_IOCAP_SEQUENTIAL;
 		return SQLITE_IOCAP_ATOMIC | SQLITE_IOCAP_BATCH_ATOMIC;
-		// return 0;
 	}
 }
 

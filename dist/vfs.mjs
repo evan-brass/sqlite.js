@@ -1,11 +1,5 @@
 import { SQLITE_NOTFOUND } from "./sqlite_def.mjs";
 
-class MustOverrideError extends Error {
-	constructor() {
-		super("Custom VFS implementations must override this method.");
-	}
-}
-
 export class Vfs {
 	name = "mem";
 	max_pathname = 64;
