@@ -17,7 +17,8 @@ const last_errors = new Map();
 const file_impls = new Map();
 const file_vfs = new Map();
 export const funcs = [];
-export const sqlite3 = await asyncify(fetch(new URL('sqlite3.async.wasm', import.meta.url)), {
+export let sqlite3;
+export const initialized = asyncify(fetch(new URL('sqlite3.async.wasm', import.meta.url)), {
 	env: {
 		log(_, code, msg_ptr) {
 			const msg = read_str(msg_ptr);
@@ -271,8 +272,10 @@ export const sqlite3 = await asyncify(fetch(new URL('sqlite3.async.wasm', import
 }, {
 	// This is the value I've been using for debug builds.  A smaller value would likely work for an optimized build:
 	stack_size: 2 ** 15
+}).then(exports => {
+	sqlite3 = exports;
+	sqlite3._start(); // Call the main function
 });
-sqlite3._start(); // Call the main function
 
 export function value2js(value_ptr) {
 	const type = sqlite3.sqlite3_value_type(value_ptr);
