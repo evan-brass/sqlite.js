@@ -7,8 +7,6 @@ import {
 	SQLITE_OPEN_CREATE, SQLITE_OPEN_DELETEONCLOSE
 } from './sqlite_def.mjs';
 
-const dir = await navigator.storage.getDirectory();
-
 // TODO: Support openning files in subfolders of the OPFS
 
 export class OpfsFile extends VfsFile {
@@ -120,17 +118,20 @@ export class Opfs extends Vfs {
 	async open(filename, flags) {
 		// console.log(filename, 'open', flags);
 		const create = flags & SQLITE_OPEN_CREATE;
+		const dir = await navigator.storage.getDirectory();
 		const handle = await dir.getFileHandle(filename, { create });
 		return new OpfsFile(handle, flags);
 	}
 	async delete(filename, sync) {
 		// console.log(filename, 'delete', sync);
+		const dir = await navigator.storage.getDirectory();
 		await dir.removeEntry(filename);
 	}
 	async access(filename, flags) {
 		// console.log(filename, 'access', flags);
 		if (flags == SQLITE_ACCESS_EXISTS) {
 			try {
+				const dir = await navigator.storage.getDirectory();
 				await dir.getFileHandle(filename);
 				return true;
 			} catch {
