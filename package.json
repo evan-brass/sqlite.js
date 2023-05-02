@@ -13,6 +13,9 @@
 		"opfs",
 		"origin-private-file-system"
 	],
+	"scripts":{
+		"install": "make RELEASE=true"
+	},
 	"files": [
 		"dist/*.mjs",
 		"dist/*.async.wasm"
