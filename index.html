@@ -1,11 +1,14 @@
 <!DOCTYPE html>
 <script type="module">
 	import {
+		initialized,
 		register_vfs, open, create_scalar_func, make_sql, rows,
 		SQLITE_DETERMINISTIC,
 		opfs
 	} from './dist/index.mjs';
 
+	await initialized;
+	
 	register_vfs(opfs, true);
 
 	const conn = await open('test.db');

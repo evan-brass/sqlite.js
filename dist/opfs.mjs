@@ -1,22 +1,20 @@
-import { Vfs, VfsFile } from './vfs.mjs';
 import {
 	SQLITE_OK,
 	SQLITE_ACCESS_EXISTS,
 	SQLITE_FCNTL_BEGIN_ATOMIC_WRITE, SQLITE_FCNTL_COMMIT_ATOMIC_WRITE, SQLITE_FCNTL_ROLLBACK_ATOMIC_WRITE,
 	SQLITE_IOCAP_ATOMIC, SQLITE_IOCAP_BATCH_ATOMIC,
-	SQLITE_OPEN_CREATE, SQLITE_OPEN_DELETEONCLOSE
+	SQLITE_OPEN_CREATE, SQLITE_OPEN_DELETEONCLOSE, SQLITE_NOTFOUND
 } from './sqlite_def.mjs';
 
 // TODO: Support openning files in subfolders of the OPFS
 
-export class OpfsFile extends VfsFile {
+export class OpfsFile {
 	#handle;
 	#lock;
 	#writable = false;
 	flags = 0;
 	sector_size = 0;
 	constructor(handle, _flags) {
-		super();
 		this.#handle = handle;
 		this.flags = 0;
 	}
@@ -65,7 +63,7 @@ export class OpfsFile extends VfsFile {
 			this.#writable = false;
 			return SQLITE_OK;
 		} else {
-			return super.file_control(op, arg);
+			return SQLITE_NOTFOUND;
 		}
 	}
 	async trunc(length) {
@@ -81,6 +79,7 @@ export class OpfsFile extends VfsFile {
 		return BigInt(file.size);
 	}
 	lock(lock_level) {
+		// TODO: implement the double locks to properly support reserved locking.
 		// console.log(this.#handle.name, 'lock', lock_level);
 		if (this.#lock?.mode == 'exclusive') return true;
 
@@ -113,8 +112,9 @@ export class OpfsFile extends VfsFile {
 	}
 }
 
-export class Opfs extends Vfs {
+export class Opfs {
 	name = 'opfs';
+	max_pathname = 64;
 	async open(filename, flags) {
 		// console.log(filename, 'open', flags);
 		const create = flags & SQLITE_OPEN_CREATE;
@@ -140,5 +140,6 @@ export class Opfs extends Vfs {
 		}
 		throw new Error();
 	}
+	full_pathname(pathname) { return pathname; }
 }
 export default new Opfs();
