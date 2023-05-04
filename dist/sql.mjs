@@ -1,3 +1,5 @@
+// This file is the the namesake of this library.
+
 import { OutOfMemError } from './asyncify.mjs';
 import { sqlite3, mem8, memdv, read_str, alloc_str, encoder, decoder, handle_error } from './sqlite.mjs';
 import {
