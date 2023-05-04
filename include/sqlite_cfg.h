@@ -43,7 +43,6 @@
 // #define SQLITE_ENABLE_DBPAGE_VTAB
 // #define SQLITE_ENABLE_DBSTAT
 // #define SQLITE_DEFAULT_MEMSTATUS 1
-// #define SQLITE_ENABLE_OFFSET_SQL_FUNC
 
 
 // === Optional - Removes features ===
