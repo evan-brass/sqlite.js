@@ -89,7 +89,7 @@ export default async function asyncify(module, imports, {stack_size = 1024} = {}
 					value = await prom;
 					stack = save_stack;
 					exports.asyncify_start_rewind(save_stack);
-					result = exports[name]();
+					result = exports[name](...args);
 				} while (exports.asyncify_get_state() == State.Unwinding);
 
 				return result;

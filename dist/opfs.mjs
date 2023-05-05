@@ -7,6 +7,7 @@ import {
 } from './sqlite_def.mjs';
 
 // TODO: Support openning files in subfolders of the OPFS
+// TODO: Re-write this whole file... it's pretty bad.
 
 export class OpfsFile {
 	#handle;
@@ -30,11 +31,16 @@ export class OpfsFile {
 			await this.#handle.remove();
 		}
 	}
-	sync() {/* Do Nothing. */}
+	async sync() {
+		if (this.#writable) {
+			await this.#writable.close();
+			this.#writable = false;
+		}
+	}
 	async read(offset, len) {
 		// console.log(this.#handle.name, 'read', len, 'at', offset);
 		offset = Number(offset);
-		if (this.#writable) throw new Error();
+		if (this.#writable) throw new Error('wat');
 		const file = await this.#handle.getFile();
 		const section = file.slice(offset, offset + len);
 		const data = new Uint8Array(await section.arrayBuffer());
@@ -44,8 +50,16 @@ export class OpfsFile {
 	async write(buffer, offset) {
 		// console.log(this.#handle.name, 'write', buffer.byteLength, 'at', offset);
 		// console.log(buffer.slice());
-		if (!this.#writable) throw new Error();
+		let close_immediate = false;
+		if (!this.#writable) {
+			this.#writable = await this.#handle.createWritable({keepExistingData: true});
+			close_immediate = true;
+		}
 		await this.#writable.write({ type: 'write', data: buffer, position: Number(offset) });
+		if (close_immediate) {
+			await this.#writable.close();
+			this.#writable = false;
+		}
 	}
 	async file_control(op, arg) {
 		// console.log(this.#handle.name, 'control', op, arg);
@@ -103,6 +117,8 @@ export class OpfsFile {
 		}
 	}
 	check_reserved_lock() {
+		// TODO:
+		return 1;
 		throw new Error();
 	}
 	sector_size() { return 1; }

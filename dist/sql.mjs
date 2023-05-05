@@ -49,7 +49,7 @@ export async function* stmts(conn, sql) {
 				stmt = memdv().getInt32(stmt_ptr, true);
 				handle_error(res, conn);
 
-				yield stmt;
+				if (stmt) yield stmt;
 			} finally {
 				sqlite3.sqlite3_finalize(stmt);
 			}
