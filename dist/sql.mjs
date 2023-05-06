@@ -10,7 +10,7 @@ import {
 
 export async function open(pathname, flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_EXRESCODE) {
 	let pathname_ptr, conn_ptr;
-	let conn;
+	let conn = 0;
 	try {
 		pathname_ptr = alloc_str(pathname);
 		conn_ptr = sqlite3.malloc(4);
