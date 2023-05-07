@@ -1,3 +1,4 @@
+export * from './asyncify.mjs';
 export * from './sqlite.mjs';
 export * from './sqlite_def.mjs';
 export * from './vfs.mjs';

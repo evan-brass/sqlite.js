@@ -7,124 +7,132 @@ import {
 } from './sqlite_def.mjs';
 
 // TODO: Support openning files in subfolders of the OPFS
-// TODO: Re-write this whole file... it's pretty bad.
+
+function get_lock(name, options) {
+	return new Promise(res => {
+		navigator.locks.request(name, options, async lock => {
+			res(lock);
+			if (lock) {
+				await new Promise(res2 => { lock.release = res2; })
+			}
+		});
+	});
+}
 
 export class OpfsFile {
 	#handle;
 	#lock;
-	#writable = false;
+	#res_lock;
+	#writable_stream;
 	flags = 0;
 	sector_size = 0;
 	constructor(handle, _flags) {
 		this.#handle = handle;
 		this.flags = 0;
 	}
+	// Other:
+	device_characteristics() {
+		return SQLITE_IOCAP_ATOMIC | SQLITE_IOCAP_BATCH_ATOMIC;
+	}
+	// Locking:
 	get lock_name() {
 		return `opfs.mjs:${this.#handle.name}`;
 	}
-	get lock_name_reserved() {
-		return this.lock_name + '-r';
+	get lock_name_res() {
+		return this.lock_name + '-r'
 	}
+	async lock(level) {
+		if (level >= 1 && !this.#lock) {
+			// Aquire a shared lock on lock_name
+			this.#lock = await get_lock(this.lock_name, {mode: 'shared', ifAvailable: true});
+			if (!this.#lock) return false;
+		}
+		if (level >= 2 && !this.#res_lock) {
+			// Aquire an exclusive lock on lock_name_res or return BUSY if it isn't available.
+			this.#res_lock = await get_lock(this.lock_name_res, {mode: 'exclusive', ifAvailable: true});
+			if (!this.#res_lock) return false;
+		}
+		if (level >= 3 && !this.#lock.mode == 'shared') {
+			// Exchange our shared lock on lock_name for an exclusive lock on lock_name
+			const new_lock_prom = get_lock(this.lock_name);
+			this.#lock.release();
+			this.#lock = await new_lock_prom;
+		}
+		// We don't need to do anything for level 4 (EXCLUSIVE) because we do all that work inside pending.
+
+		return true;
+	}
+	async unlock(level) {
+		if (level <= 1 && this.#lock?.mode == 'exclusive') {
+			this.#lock.release();
+			this.#lock = await get_lock(this.lock_name, {mode: 'shared'});
+			this.#res_lock.release();
+			this.#res_lock = null;
+		}
+		if (level <= 0 && this.#lock) {
+			this.#lock.release();
+			this.#lock = null;
+		}
+	}
+	async check_reserved_lock() {
+		const res = await get_lock(this.lock_name_res, {mode: 'shared', ifAvailable: true});
+		if (res) {
+			res.release();
+		}
+		return !res;
+	}
+	// IO:
 	async close() {
-		// console.log(this.#handle.name, 'close');
 		if (this.flags & SQLITE_OPEN_DELETEONCLOSE) {
 			await this.#handle.remove();
 		}
 	}
 	async sync() {
-		if (this.#writable) {
-			await this.#writable.close();
-			this.#writable = false;
-		}
+		if (this.#writable_stream) throw new Error('wat?');
 	}
 	async read(offset, len) {
-		// console.log(this.#handle.name, 'read', len, 'at', offset);
 		offset = Number(offset);
-		if (this.#writable) throw new Error('wat');
+		if (this.#writable_stream) throw new Error('wat?');
 		const file = await this.#handle.getFile();
 		const section = file.slice(offset, offset + len);
 		const data = new Uint8Array(await section.arrayBuffer());
-		// console.log(data);
 		return data;
 	}
 	async write(buffer, offset) {
-		// console.log(this.#handle.name, 'write', buffer.byteLength, 'at', offset);
-		// console.log(buffer.slice());
-		let close_immediate = false;
-		if (!this.#writable) {
-			this.#writable = await this.#handle.createWritable({keepExistingData: true});
-			close_immediate = true;
-		}
-		await this.#writable.write({ type: 'write', data: buffer, position: Number(offset) });
-		if (close_immediate) {
-			await this.#writable.close();
-			this.#writable = false;
-		}
+		const position = Number(offset);
+		const stream = this.#writable_stream ?? await this.#handle.createWritable({keepExistingData: true});
+
+		await stream.write({type: 'write', data: buffer, position});
+
+		if (this.#writable_stream != stream) await stream.close();
 	}
-	async file_control(op, arg) {
-		// console.log(this.#handle.name, 'control', op, arg);
+	async file_control(op, _arg) {
 		if (op == SQLITE_FCNTL_BEGIN_ATOMIC_WRITE) {
-			this.#writable = await this.#handle.createWritable({keepExistingData: true});
+			this.#writable_stream = await this.#handle.createWritable({keepExistingData: true});
 			return SQLITE_OK;
 		}
 		else if (op == SQLITE_FCNTL_COMMIT_ATOMIC_WRITE) {
-			await this.#writable.close();
-			this.#writable = false;
+			await this.#writable_stream.close();
+			this.#writable_stream = null;
 			return SQLITE_OK;
 		}
 		else if (op == SQLITE_FCNTL_ROLLBACK_ATOMIC_WRITE) {
-			await this.#writable.abort();
-			this.#writable = false;
+			await this.#writable_stream.abort();
+			this.#writable_stream = null;
 			return SQLITE_OK;
 		} else {
 			return SQLITE_NOTFOUND;
 		}
 	}
 	async trunc(length) {
-		if (this.#writable) throw new Error();
-		// console.log(this.#handle.name, 'trunc', length);
+		if (this.#writable_stream) throw new Error('wat?');
 		const writable = await this.#handle.createWritable({keepExistingData: true});
 		await writable.truncate(Number(length));
 		await writable.close();
 	}
 	async size() {
-		// console.log(this.#handle.name, 'size');
 		const file = await this.#handle.getFile();
 		return BigInt(file.size);
-	}
-	lock(lock_level) {
-		// TODO: implement the double locks to properly support reserved locking.
-		// console.log(this.#handle.name, 'lock', lock_level);
-		if (this.#lock?.mode == 'exclusive') return true;
-
-		return new Promise(ret => {
-			navigator.locks.request(this.lock_name, {mode: 'exclusive', ifAvailable: true}, lock => new Promise(res => {
-				if (lock) {
-					this.#lock = lock;
-					this.#lock.release = res;
-					ret(true);
-				} else {
-					ret(false);
-				}
-			}));
-		});
-	}
-	unlock(lock_level) {
-		// console.log(this.#handle.name, 'unlock', lock_level);
-		if (lock_level == 0 && this.#lock) {
-			this.#lock.release();
-			this.#lock = false;
-		}
-	}
-	check_reserved_lock() {
-		// TODO:
-		return 1;
-		throw new Error();
-	}
-	sector_size() { return 1; }
-	device_characteristics() {
-		// console.log(this.#handle.name, 'iocap');
-		return SQLITE_IOCAP_ATOMIC | SQLITE_IOCAP_BATCH_ATOMIC;
 	}
 }
 
@@ -132,6 +140,7 @@ export class Opfs {
 	name = 'opfs';
 	max_pathname = 64;
 	async open(filename, flags) {
+		// TODO: Handle folders
 		// console.log(filename, 'open', flags);
 		const create = flags & SQLITE_OPEN_CREATE;
 		const dir = await navigator.storage.getDirectory();
