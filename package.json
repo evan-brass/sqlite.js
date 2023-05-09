@@ -17,7 +17,7 @@
 		"install": "make RELEASE=true"
 	},
 	"files": [
-		"dist/*.mjs",
+		"dist/**/*.mjs",
 		"dist/*.async.wasm"
 	],
 	"main": "dist/index.mjs",
