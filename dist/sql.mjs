@@ -4,11 +4,11 @@ import { OutOfMemError } from './asyncify.mjs';
 import { sqlite3, mem8, memdv, read_str, alloc_str, encoder, decoder, handle_error } from './sqlite.mjs';
 import {
 	SQLITE_ROW, SQLITE_DONE,
-	SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
+	SQLITE_OPEN_URI, SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
 	SQLITE_INTEGER, SQLITE_FLOAT, SQLITE3_TEXT, SQLITE_BLOB, SQLITE_NULL
 } from "./sqlite_def.mjs";
 
-export async function open(pathname, flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_EXRESCODE) {
+export async function open(pathname, flags = SQLITE_OPEN_URI | SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_EXRESCODE) {
 	let pathname_ptr, conn_ptr;
 	let conn = 0;
 	try {
