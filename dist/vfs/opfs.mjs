@@ -142,7 +142,7 @@ export class Opfs {
 	async open(filename, flags) {
 		// TODO: Handle folders
 		// console.log(filename, 'open', flags);
-		const create = flags & SQLITE_OPEN_CREATE;
+		const create = Boolean(flags & SQLITE_OPEN_CREATE);
 		const dir = await navigator.storage.getDirectory();
 		const handle = await dir.getFileHandle(filename, { create });
 		return new OpfsFile(handle, flags);
