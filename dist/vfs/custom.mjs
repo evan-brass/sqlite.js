@@ -56,8 +56,7 @@ class Filename {
 		}
 	}
 	*[Symbol.iterator]() {
-		let i = 0;
-		while (1) {
+		for (let i = 0; true; ++i) {
 			const param_ptr = sqlite3.sqlite3_uri_key(this.#ptr, i);
 			if (!param_ptr) break;
 			const param = read_str(param_ptr);
