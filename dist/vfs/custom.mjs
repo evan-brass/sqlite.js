@@ -44,12 +44,15 @@ class Filename {
 				const res = sqlite3.sqlite3_uri_boolean(this.#ptr, param_ptr, Number(def_val));
 				return Boolean(res);
 			}
-			else if (typeof def_val == 'number' || typeof def_val == 'bigint') {
-				return sqlite3.sqlite3_uri_int64(this.#ptr, param_ptr, BigInt(def_val));
+			else if (typeof def_val == 'number') {
+				return Number(sqlite3.sqlite3_uri_int64(this.#ptr, param_ptr, BigInt(def_val)));
+			}
+			else if (typeof def_val == 'bigint') {
+				return sqlite3.sqlite3_uri_int64(this.#ptr, param_ptr, def_val);
 			}
 			else {
 				const res = sqlite3.sqlite3_uri_parameter(this.#ptr, param_ptr);
-				return res ? read_str(res) : undefined;
+				return res ? read_str(res) : def_val;
 			}
 		} finally {
 			sqlite3.free(param_ptr);
