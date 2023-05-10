@@ -1,4 +1,4 @@
-import { OutOfMemError } from "./asyncify.mjs";
+import { OutOfMemError } from "./util.mjs";
 import { sqlite3, initialized, alloc_str, handle_error, memdv } from "./sqlite.mjs";
 import { SQLITE_OPEN_READWRITE, SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE } from "./sqlite_def.mjs";
 

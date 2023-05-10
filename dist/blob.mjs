@@ -1,5 +1,5 @@
 import { alloc_str, handle_error, mem8, memdv, sqlite3 } from './sqlite.mjs';
-import { OutOfMemError } from './asyncify.mjs';
+import { OutOfMemError } from './util.mjs';
 
 export async function blob_open(conn, table, column, rowid, {db = 'main', writable = true} = {}) {
 	let blob_ptr;

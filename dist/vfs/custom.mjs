@@ -6,7 +6,7 @@
  * WAL because browsers have shared memory, but I don't currently know how to do it.
  */
 import './basics.mjs';
-import { OutOfMemError } from "../asyncify.mjs";
+import { OutOfMemError } from "../util.mjs";
 import { sqlite3, imports, alloc_str, read_str, mem8, memdv, encoder, handle_error } from "../sqlite.mjs";
 import {
 	SQLITE_OK,

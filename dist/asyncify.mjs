@@ -1,19 +1,11 @@
+import { OutOfMemError, is_promise } from "./util.mjs";
+
 let value, stack;
 const State = {
 	None: 0,
 	Unwinding: 1,
 	Rewinding: 2
 };
-
-export class OutOfMemError extends Error {
-	constructor() {
-		super("Out of Memory");
-	}
-}
-
-export function is_promise(val) {
-	return ['object', 'function'].includes(typeof val) && typeof val?.then == 'function';
-}
 
 export default async function asyncify(module, imports, {stack_size = 1024} = {}) {
 	// Make a module from the source:
