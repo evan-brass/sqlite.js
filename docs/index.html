@@ -20,7 +20,7 @@
 		<pre style="word-wrap: break-word; white-space: break-spaces; background-color: #eee; padding: 1em; border: 1px solid #aaa;">Output:<br><output id="result"></output></pre>
 		<script type="module">
 			// import { open as open_db, sqlite3, register_vfs, opfs, alloc_str, read_str, make_sql, AsObject } from 'https://unpkg.com/sql.mjs@0.3.1';
-			import { initialized, open as open_db, sqlite3, register_vfs, opfs, alloc_str, read_str, make_sql } from '/dist/index.mjs';
+			import { initialized, open as open_db, sqlite3, register_vfs, opfs, picker, alloc_str, read_str, make_sql } from '/dist/index.mjs';
 
 			let conn = 0, sql;
 			document.querySelector('#eval').onclick = async () => {
@@ -45,6 +45,7 @@
 			await initialized;
 
 			register_vfs(opfs, true); // Enable Origin-Private-File-System database files and make them default
+			register_vfs(picker); // Enable Origin-Private-File-System database files and make them default
 
 			const main_str = alloc_str('main');
 			async function open(pathname) {
