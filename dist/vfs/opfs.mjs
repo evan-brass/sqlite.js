@@ -4,36 +4,42 @@ import {
 } from '../sqlite_def.mjs';
 import { File } from './file.mjs';
 
+async function descend(filename, flags) {
+	let handle = await navigator.storage.getDirectory();
+	const create = Boolean(flags & SQLITE_OPEN_CREATE);
+	const path = String(filename).split('/');
+	while (path.length) {
+		const part = path.shift();
+		if (!part) continue;
+		
+		handle = await handle[`get${path.length ? 'Directory' : 'File'}Handle`](part, { create });
+	}
+	if (!(handle instanceof FileSystemFileHandle)) throw new Error('Bad path.');
+	return handle;
 }
 
 export class Opfs {
 	name = 'opfs';
-	max_pathname = 64;
+	max_pathname = 128;
 	async open(filename, flags) {
-		// TODO: Handle folders
-		// console.log(filename, 'open', flags);
-		const create = Boolean(flags & SQLITE_OPEN_CREATE);
-		const dir = await navigator.storage.getDirectory();
-		const handle = await dir.getFileHandle(filename, { create });
+		const handle = await descend(filename, flags);
 		return new File(handle, flags);
 	}
 	async delete(filename, sync) {
-		// console.log(filename, 'delete', sync);
-		const dir = await navigator.storage.getDirectory();
-		await dir.removeEntry(filename);
+		const handle = await descend(filename, 0);
+		await handle.remove();
 	}
 	async access(filename, flags) {
 		// console.log(filename, 'access', flags);
 		if (flags == SQLITE_ACCESS_EXISTS) {
 			try {
-				const dir = await navigator.storage.getDirectory();
-				await dir.getFileHandle(filename);
+				const _handle = await descend(filename, 0);
 				return true;
 			} catch {
 				return false;
 			}
 		}
-		throw new Error();
+		throw new Error("Unimplemented");
 	}
 	full_pathname(pathname) { return pathname; }
 }
