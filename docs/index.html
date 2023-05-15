@@ -7,63 +7,91 @@
 			display: inline-block;
 			background-color: #eee;
 			padding: 0.5em;
+			font-size: 0.9em;
+		}
+		html {
+			font-size: 16px;
+			line-height: 1.5;
+			font-family: sans-serif;
+		}
+		main {
+			max-width: 90ch;
+			margin: 1em auto;
+		}
+		textarea {
+			box-sizing: border-box;
+			width: 100%;
+			min-height: 10em;
 		}
 	</style>
+	<!-- <base href="/docs/"> -->
 </head>
 <body>
-	<main style="max-width: 80ch; margin: 1em auto">
+	<main>
 		<h1>sql.mjs demo</h1>
-		<p>Current: <output id="dbname">[no db open]</output></p>
-		<p><input id="pathname" type="text" placeholder="filename"><button id="open">Open</button></p>
-		<p><textarea style="box-sizing: border-box; width: 100%; min-height: 10em;" placeholder="SELECT 'Hello World!';"></textarea></p>
+		<p><output id="dbname">[no db open]</output></p>
+		<p><textarea placeholder="SELECT 'Hello World!';"></textarea></p>
 		<button id="eval">Eval</button>
 		<pre style="word-wrap: break-word; white-space: break-spaces; background-color: #eee; padding: 1em; border: 1px solid #aaa;">Output:<br><output id="result"></output></pre>
 		<script type="module">
 			// import { open as open_db, sqlite3, register_vfs, opfs, alloc_str, read_str, make_sql, AsObject } from 'https://unpkg.com/sql.mjs@0.3.1';
-			import { initialized, open as open_db, sqlite3, register_vfs, opfs, picker, alloc_str, read_str, make_sql } from '/dist/index.mjs';
+			import {
+				Conn, open,
+				SQLITE_OPEN_READONLY,
+				SQLITE_OPEN_READWRITE,
+				SQLITE_OPEN_CREATE,
+				SQLITE_OPEN_URI,
+				SQLITE_OPEN_MEMORY,
+				SQLITE_OPEN_NOMUTEX,
+				SQLITE_OPEN_FULLMUTEX,
+				SQLITE_OPEN_SHAREDCACHE,
+				SQLITE_OPEN_PRIVATECACHE,
+				SQLITE_OPEN_NOFOLLOW,
+				SQLITE_OPEN_EXRESCODE,
+			} from '/dist/index.mjs';
 
-			let conn = 0, sql;
-			document.querySelector('#eval').onclick = async () => {
-				document.querySelector('#result').innerText = '';
+			const conn = new Conn();
+
+			const eval_btn = document.querySelector('#eval');
+			const result = document.querySelector('#result');
+			const code = document.querySelector('textarea');
+			const dbname = document.querySelector('#dbname');
+			function update_ui() {
+				dbname.innerText = conn.filename;
+			}
+			update_ui();
+			function abort() {
+				conn.interrupt();
+			}
+			async function evaluate() {
+				const orig_txt = eval_btn.innerText;
+				eval_btn.innerText = 'Abort';
+				eval_btn.onclick = abort;
+
+				result.innerText = '';
 				try {
-					const res = eval('sql`' + document.querySelector('textarea').value + '`');
-					localStorage.setItem('code', document.querySelector('textarea').value);
+					const res = eval('conn.sql`' + code.value + '`');
 					for await (const row of res) {
 						for (const key in row) {
 							if (row[key] instanceof Uint8Array) row[key] = Array.from(row[key]);
 						}
-						document.querySelector('#result').insertAdjacentText('beforeend', JSON.stringify(row) + '\n');
+						result.insertAdjacentText('beforeend', JSON.stringify(row) + '\n');
+						update_ui();
 					}
 				} catch (e) {
-					document.querySelector('#result').insertAdjacentHTML('beforeend', `<span style="color: red">${e.toString()}</span>`);
+					result.insertAdjacentHTML('beforeend', `<span style="color: red">${e.toString()}</span>`);
 				}
-			};
+				eval_btn.innerText = orig_txt;
+				eval_btn.onclick = evaluate;
 
-			document.querySelector('textarea').innerText = localStorage.getItem('code');
-
-			// Wait for sql.mjs to finish initializing (instantiating the wasm module and running the main function).
-			await initialized;
-
-			register_vfs(opfs, true); // Enable Origin-Private-File-System database files and make them default
-			register_vfs(picker); // Enable Origin-Private-File-System database files and make them default
-
-			const main_str = alloc_str('main');
-			async function open(pathname) {
-				sqlite3.sqlite3_close_v2(conn);
-				conn = await open_db(pathname);
-				sql = make_sql(conn);
-
-				const filename_ptr = sqlite3.sqlite3_db_filename(conn, main_str);
-				const filename = read_str(filename_ptr) || ':memory:';
-				document.querySelector('#dbname').innerText = filename;
-
-				localStorage.setItem('pathname', filename);
+				update_ui();
 			}
-			await open(localStorage.getItem('pathname') || 'test.db');
-			document.querySelector('#open').onclick = () => open(document.querySelector('#pathname').value);
+			eval_btn.onclick = evaluate;
+
+			// Make it so that you can copy code snippets into the text area:
 			document.body.addEventListener('click', e => {
 				if (e.target.matches('code')) {
-					document.querySelector('textarea').innerText = e.target.innerText;
+					document.querySelector('textarea').value = e.target.innerText;
 				}
 			});
 		</script>
@@ -81,7 +109,33 @@
 	('feed the dog', null, '4.5');</code></li>
 			<li>List your todos: <code>SELECT title, description FROM todo ORDER BY priority DESC;</code></li>
 			<li>Do pragma things: <code>PRAGMA table_list;</code></li>
-			<li>Refresh your browser and see if your data is still there 🤞🏻</li>
+		</ul>
+		<h2>Non-memory Databases</h2>
+		<p>By default, you'll be connected to an in-memory database which will be lost on refresh.  You can change that by using the open command.</p>
+		<p>These commands are equivalent - they open test.db inside the Origin-Private-File-System:</p>
+		<ul>
+			<li><code>${open`test.db${'opfs'}`}</code></li>
+			<li><code>${open`file://localhost/test.db?vfs=opfs`}</code></li>
+		</ul>
+		<p>But we can do more interesting things.  These commands open databases using the open / save file pickers:</p>
+		<h3>Show the open file picker:</h3>
+		<ul>
+			<li><code>${open`open${'picker'}`}</code></li>
+			<li><code>${open`file://localhost?vfs=picker`}</code></li>
+		</ul>
+		<h3>Show the save file picker:</h3>
+		<ul>
+			<li><code>${open`file://suggested_name?vfs=picker&save=true`}</code></li>
+		</ul>
+		<p>For Origin-Private-File-System database files, writable permission is always granted.  For databases opened through the file pickers are readable.  Attempting to write to a file-picker database for the first time will trigger a browser permission prompt.  File pickers and permission prompts require that you call Conn.sql from a <a href="https://developer.mozilla.org/en-US/docs/Web/Security/User_activation">user gesture</a>.</p>
+		<h2>Possible Use-Cases</h2>
+		<ul>
+			<li>Adding Full-Text search to a static website: <a href="https://www.sqlite.org/fts5.html">https://www.sqlite.org/fts5.html</a></li>
+			<li>Building content management systems that run client-side - potentially inside the service worker.</li>
+			<li>Editing SQLite databases without needing to install any software.</li>
+			<li>Building interactive SQL education materials.</li>
+			<li>Using R-Trees to create calendar widgets: <a href="https://www.sqlite.org/rtree.html">https://www.sqlite.org/rtree.html</a></li>
+			<li>Building exporters that help people retrieve their data from various online platforms.  This could maybe facilitate user-mobility between / away from walled gardens.</li>
 		</ul>
 	</main>
 </body>

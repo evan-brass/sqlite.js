@@ -1,9 +1,15 @@
+import { default as sqlite_initialized, sqlite3 } from './sqlite.mjs';
+import * as vfs from './vfs/index.mjs';
+
 export * from './asyncify.mjs';
-export * from './sqlite.mjs';
 export * from './sqlite_def.mjs';
 export * from './func.mjs';
-export * from './sql.mjs';
-export * from './blob.mjs';
-export * from './pool.mjs';
+export * from './conn.mjs';
+export {sqlite3, vfs};
 
-export * from './vfs/index.mjs';
+export const initialized = (async () => {
+	await sqlite_initialized;
+
+	vfs.register_vfs(vfs.opfs, true);
+	vfs.register_vfs(vfs.picker);
+})();
