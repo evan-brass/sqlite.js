@@ -12,4 +12,5 @@ export const initialized = (async () => {
 
 	vfs.register_vfs(vfs.opfs, true);
 	vfs.register_vfs(vfs.picker);
+	vfs.register_vfs(vfs.http);
 })();
