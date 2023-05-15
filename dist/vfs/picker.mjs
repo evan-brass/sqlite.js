@@ -9,14 +9,16 @@ export class Picker {
 	max_pathname = 64;
 	async open(filename, flags) {
 		const save = filename.get_parameter('save', false);
-		const [handle] = await self[`show${save ? 'Save' : 'Open'}FilePicker`]({
+		const suggestedName = String(filename).replace(/^.*\//, '');
+		const result = await self[`show${save ? 'Save' : 'Open'}FilePicker`]({
 			multiple: false,
-			suggestedName: String(filename),
+			suggestedName,
 			types: [{
 				description: "SQLite Database File",
 				accept: { 'application/sqlite*': ['.sqlite', '.sqlite3', '.db', '.db3']}
 			}]
 		});
+		const handle = save ? result : result[0];
 		return new File(handle, flags);
 	}
 	async delete(_filename, _sync) {
