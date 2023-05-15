@@ -3,9 +3,12 @@ import {
 	SQLITE_OK,
 	SQLITE_ROW, SQLITE_DONE
 } from './sqlite_def.mjs';
+import { OutOfMemError } from './util.mjs';
 
 export const encoder = new TextEncoder();
 export const decoder = new TextDecoder();
+
+export let main_ptr;
 
 /**
  * Asyncify will automatically stub out all the imports, so we don't have to provide all the imports during wasm instantiation.
@@ -26,6 +29,10 @@ const stack_size = 2 ** 15; // This is pretty big.  I think a smaller value woul
 export const initialized = asyncify(fetch(new URL('sqlite3.async.wasm', import.meta.url)), imports, { stack_size }).then(exports => {
 	sqlite3 = exports;
 	sqlite3._start(); // Call the main function
+
+	main_ptr = alloc_str('main');
+	if (!main_ptr) throw new OutOfMemError();
+
 	return sqlite3;
 });
 
