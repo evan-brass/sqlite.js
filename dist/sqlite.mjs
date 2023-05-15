@@ -13,7 +13,7 @@ export let main_ptr;
 /**
  * Asyncify will automatically stub out all the imports, so we don't have to provide all the imports during wasm instantiation.
  * What's nice about this is that it lets us add import implementations later from other modules / extensions.  If you only need
- * the in memory vfs (without date / time / random functionality) then you could technically not import vfs.mjs.
+ * the in memory vfs (without date / time / random functionality) then you could technically just not impor the vfs stuff.
  */
 export const imports = {
 	env: {
