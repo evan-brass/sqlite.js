@@ -16,7 +16,7 @@ export async function blob_open(conn, table, column, rowid, {db = 'main', writab
 
 		const res = await sqlite3.sqlite3_blob_open(conn, db_ptr, table_ptr, column_ptr, rowid, Number(writable), blob_ptr_ptr);
 		blob_ptr = memdv().getInt32(blob_ptr_ptr, true);
-		handle_error(res);
+		handle_error(res, conn);
 
 		return blob_ptr;
 	} catch (e) {
@@ -33,7 +33,7 @@ async function close(blob_ptr, buffer_ptr, auto_close) {
 	sqlite3.free(buffer_ptr);
 	if (auto_close) {
 		const res = await sqlite3.sqlite3_blob_close(blob_ptr);
-		handle_error(res);
+		handle_error(res, conn);
 	}
 }
 export function blob_read_source(blob, {buffer_size = 1024, offset = 0, length, auto_close = true} = {}) {
@@ -56,7 +56,7 @@ export function blob_read_source(blob, {buffer_size = 1024, offset = 0, length, 
 			if (controller.byobRequest) {
 				const num_to_read = Math.min(controller.byobRequest.view.byteLength, length, buffer_size);
 				const res = await sqlite3.sqlite3_blob_read(blob, buffer_ptr, num_to_read, offset);
-				handle_error(res);
+				handle_error(res, conn);
 				length -= num_to_read;
 				offset += num_to_read;
 	

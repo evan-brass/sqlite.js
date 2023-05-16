@@ -14,7 +14,7 @@ export function create_scalar_func(conn, func, {flags = 0, nArgs = func.length} 
 		flags,
 		funcs.length
 	);
-	handle_error(res);
+	handle_error(res, conn);
 
 	funcs.push(func);
 }

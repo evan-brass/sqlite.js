@@ -188,7 +188,7 @@ export class Conn {
 
 			let res = await sqlite3.sqlite3_open_v2(pathname_ptr, conn_ptr, params.flags, vfs_ptr);
 			conn = memdv().getInt32(conn_ptr, true);
-			handle_error(res);
+			handle_error(res, conn);
 		} catch(e) {
 			sqlite3.sqlite3_close_v2(conn);
 			throw e;
