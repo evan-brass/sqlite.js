@@ -110,6 +110,7 @@
 			<li>List your todos: <code>SELECT title, description FROM todo ORDER BY priority DESC;</code></li>
 			<li>Do pragma things: <code>PRAGMA table_list;</code></li>
 		</ul>
+
 		<h2>Non-memory Databases</h2>
 		<p>By default, you'll be connected to an in-memory database which will be lost on refresh.  You can change that by using the open command.</p>
 		<p>These commands are equivalent - they open test.db inside the Origin-Private-File-System:</p>
@@ -131,12 +132,17 @@
 		<h3>Open Databases Over HTTP(S)</h3>
 		<ul>
 			<li><code>${open`file://cdn.jsdelivr.net/gh/alex-hofsteede/zipcode_db/zipcodes.sqlite?vfs=http&https=on`}</code></li>
+			<li>Example of opening an empty file as a sqlite database <code>${open`empty.db${'http'}`}</code></li>
+			<li>Example of opening a relative file using a uri <strong>Note:</strong> localhost here is being used to mean "relative to the current website's origin".<code>${open`file://localhost/docs/test.db?vfs=http`}</code></li>
+			<li>Example of loading a file from the user's local computer: <code>${open`file://localhost:80/docs/test.db?vfs=http`}</code></li>
 		</ul>
-		<p>For example, with this zipcodes.sqlite database open, we can find all of the zipcodes in the state of Oregon:</p>
+		<p>For example, with the zipcodes.sqlite database open, we can find all of the zipcodes in the state of Oregon:</p>
 <pre><code>SELECT zip, cities.name AS city FROM zipcodes
 INNER JOIN cities ON cities.id = zipcodes.city_id
 WHERE state_id = (SELECT id FROM states WHERE name = 'OR');</code></pre>
-		<p>This is a pretty long operation because (with this databases indexes) this requires a full table scan.  The HTTP VFS uses the Range header to do partial reads.  This database uses a 4.5kb page size, but a larger page size would probably be better.</p>
+		<p>This is a pretty long operation because (with this database's indexes) this requires a full table scan.  The HTTP VFS uses the Range header to do partial reads.  This database uses a 4.5kb page size, but a larger page size would probably be better.</p>
+		<p>The HTTP VFS doesn't support writable files.  The HTTP VFS tells sqlite that the file is immutable, meaning that bad things will happen if you modify the file while someone is reading it.  Luckily, the HTTP VFS performs a first HEAD request and follows redirects.  Subsequent reads will use the redirected URL so you can upgrade a database by uploading a new copy of the database and then migrating the redirect to the new file.</p>
+		<p>Changing the file underneath a reader should result in an IO error if your server supports etags or last-modified.  The exception to this is for empty databases, which are never fetched from again after the initial HEAD request.</p>
 		<h2>Possible Use-Cases</h2>
 		<ul>
 			<li>Adding Full-Text search to a static website: <a href="https://www.sqlite.org/fts5.html">https://www.sqlite.org/fts5.html</a></li>

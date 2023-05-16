@@ -15,49 +15,59 @@ export class HttpFile {
 	url;
 	headers;
 	sector_size = 0;
-	constructor(url, headers = {}) {
+	#size;
+	constructor(url, size, headers = {}) {
 		this.url = url;
+		this.#size = size;
 		this.headers = headers;
 	}
 	// IO:
 	device_characteristics() { return SQLITE_IOCAP_IMMUTABLE; }
 	async read(offset, len) {
+		if (!this.#size) return new Uint8Array();
 		const headers = Object.create(this.headers);
-		headers['Range'] = `bytes=${offset}-${offset + BigInt(len - 1)}`;
+		// Gosh, I really wish Math.min worked with BigInts.
+		let end = offset + BigInt(len);
+		if (end > this.#size) end = this.#size;
+		end -= 1n; // Byte ranges are inclusive for some reason...
+		headers['Range'] = `bytes=${offset}-${end}`;
 		const resp = await fetch(this.url, { headers });
 		if (!resp.ok) throw new Error(`HTTP VFS Error (${resp.status}): ${resp.statusText}`);
 
 		return new Uint8Array(await resp.arrayBuffer());
 	}
-	async size() {
-		const headers = Object.create(this.headers);
-		const resp = await fetch(this.url, {
-			method: 'head',
-			headers
-		});
-		if (!resp.ok) throw new Error(`HTTP VFS Error (${resp.status}): ${resp.statusText}`);
-
-		return BigInt(resp.headers.get('content-length'));
+	size() {
+		return this.#size;
 	}
+	close() {}
 	async file_control(_op, _arg) { return SQLITE_NOTFOUND; }
 }
 
 export class Http {
 	name = 'http';
 	max_pathname = 128;
-	async open(filename, flags) {
+	async open(filename, _flags) {
 		const secure = filename.get_parameter('https', location?.protocol == 'https');
 		filename = String(filename);
-		const url = new URL(
-			filename.startsWith('//') ? `${secure ? 'https' : 'http' }:${filename}` : filename,
-			document?.baseURI ?? location
-		);
+		let url;
+		if (filename.startsWith('http')) {
+			url = new URL(filename);
+		} else if (filename.startsWith('//')) {
+			url = new URL(`${secure ? 'https' : 'http'}:${filename}`);
+		} else {
+			url = new URL(filename, self?.document?.baseURI ?? location);
+		}
 
-		// Check if the file exists + get final URL + etag
+		// Check if the file exists + get final URL + etag + size
 		const resp = await fetch(url, {
 			method: 'head',
 		});
 		if (!resp.ok) throw new Error(`HTTP VFS:(${resp.status}) ${resp.statusText}`);
+
+		let size = resp.headers.get('content-length');
+		if (!size) throw new Error('HTTP VFS: We require that the server return a content-length header in a HEAD response.');
+		size = BigInt(size);
+		
 		const headers = {};
 		const etag = resp.headers.get('etag');
 		if (etag) {
@@ -68,10 +78,10 @@ export class Http {
 			headers['If-Unmodified-Since'] = last_modified;
 		}
 
-		return new HttpFile(resp.url, headers);
+		return new HttpFile(resp.url, size, headers);
 	}
 	async delete(filename, sync) { throw new Error('Unimplementable'); }
-	async access(filename, flags) { debugger; return false; }
+	async access(filename, flags) { return false; }
 	full_pathname(pathname) { return pathname; }
 }
 export default new Http();
