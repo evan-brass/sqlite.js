@@ -8,6 +8,16 @@ import {
 
 export const SqlCommand = new Trait("This trait marks special commands which can be used inside template literals tagged with the Conn.sql tag.");
 
+export function backup(dest, props) {
+	return {
+		async [SqlCommand](src) {
+			for await (const {remaining, count} of src.backup(dest, props)) {
+				console.log('backup', remaining, '/', count);
+			}
+		}
+	};
+}
+
 export class OpenParams {
 	pathname = ":memory:";
 	flags = SQLITE_OPEN_URI | SQLITE_OPEN_CREATE | SQLITE_OPEN_EXRESCODE | SQLITE_OPEN_READWRITE
@@ -202,6 +212,40 @@ export class Conn {
 			this.close();
 		}
 		this.ptr = conn;
+	}
+	async *backup(dest, { src_db = 'main', dest_db = 'main', pages_per = 5 } = {}) {
+		let dconn;
+		if (dest instanceof OpenParams) {
+			dconn = new Conn();
+			await dconn.open(dest);
+		} else if (dest instanceof Conn) {
+			dconn = dest;
+		} else { throw new Error(); }
+
+		const src_name = (src_db == 'main') ? main_ptr : alloc_str(src_db);
+		const dest_name = (dest_db == 'main') ? main_ptr : alloc_str(dest_db);
+		let backup;
+		try {
+			if (!src_name || !dest_name) throw new OutOfMemError();
+			backup = await sqlite3.sqlite3_backup_init(dconn.ptr, dest_name, this.ptr, src_name); // Does this need to be awaited?
+			if (!backup) throw new Error('Backup failed');
+
+			while (1) {
+				const res = await sqlite3.sqlite3_backup_step(backup, pages_per);
+				handle_error(res, this.ptr);
+
+				if (res == SQLITE_DONE) break;
+
+				const remaining = sqlite3.sqlite3_backup_remaining(backup);
+				const count = sqlite3.sqlite3_backup_pagecount(backup);
+				yield { remaining, count };
+			}
+		} finally {
+			sqlite3.sqlite3_backup_finish(backup);
+			if (src_name != main_ptr) sqlite3.free(src_name);
+			if (dest_name != main_ptr) sqlite3.free(dest_name);
+			if (dconn != dest) dconn.close();
+		}
 	}
 	close() {
 		const old = this.ptr;

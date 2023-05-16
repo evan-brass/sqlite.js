@@ -36,7 +36,7 @@
 		<script type="module">
 			// import { open as open_db, sqlite3, register_vfs, opfs, alloc_str, read_str, make_sql, AsObject } from 'https://unpkg.com/sql.mjs@0.3.1';
 			import {
-				Conn, open,
+				Conn, open, backup,
 				SQLITE_OPEN_READONLY,
 				SQLITE_OPEN_READWRITE,
 				SQLITE_OPEN_CREATE,
@@ -143,6 +143,10 @@ WHERE state_id = (SELECT id FROM states WHERE name = 'OR');</code></pre>
 		<p>This is a pretty long operation because (with this database's indexes) this requires a full table scan.  The HTTP VFS uses the Range header to do partial reads.  This database uses a 4.5kb page size, but a larger page size would probably be better.</p>
 		<p>The HTTP VFS doesn't support writable files.  The HTTP VFS tells sqlite that the file is immutable, meaning that bad things will happen if you modify the file while someone is reading it.  Luckily, the HTTP VFS performs a first HEAD request and follows redirects.  Subsequent reads will use the redirected URL so you can upgrade a database by uploading a new copy of the database and then migrating the redirect to the new file.</p>
 		<p>Changing the file underneath a reader should result in an IO error if your server supports etags or last-modified.  The exception to this is for empty databases, which are never fetched from again after the initial HEAD request.</p>
+		
+		<h2>Online Backup</h2>
+		<p>SQLite has a backup API which operates a few pages at a time to prevent blocking writers on the source database.  If you've been working in an in-memory database, then you can download a copy of your database of your database using: <code>${backup(open`file://localhost/name?vfs=picker&save=true`)}</code></p>
+
 		<h2>Possible Use-Cases</h2>
 		<ul>
 			<li>Adding Full-Text search to a static website: <a href="https://www.sqlite.org/fts5.html">https://www.sqlite.org/fts5.html</a></li>
