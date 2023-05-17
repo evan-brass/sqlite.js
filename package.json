@@ -1,6 +1,6 @@
 {
 	"name": "sql.mjs",
-	"version": "0.13.1",
+	"version": "0.14.0",
 	"description": "SQLite Compiled to WASM, asyncified, and then wrapped in a little JavaScript.",
 	"keywords": [
 		"sqlite",
