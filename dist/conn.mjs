@@ -1,8 +1,9 @@
 import { OutOfMemError, Trait } from './util.mjs';
-import { default as sqlite_initialized, main_ptr, sqlite3, mem8, memdv, read_str, alloc_str, encoder, decoder, handle_error } from './sqlite.mjs';
+import { default as sqlite_initialized, main_ptr, sqlite3, mem8, memdv, read_str, alloc_str, encoder, decoder, handle_error, vfs_impls, file_impls } from './sqlite.mjs';
 import {
 	SQLITE_ROW, SQLITE_DONE,
 	SQLITE_OPEN_URI, SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
+	SQLITE_FCNTL_VFS_POINTER, SQLITE_FCNTL_FILE_POINTER,
 	SQLITE_INTEGER, SQLITE_FLOAT, SQLITE3_TEXT, SQLITE_BLOB, SQLITE_NULL
 } from "./sqlite_def.mjs";
 
@@ -253,10 +254,49 @@ export class Conn {
 		sqlite3.sqlite3_close_v2(old);
 	}
 	// Meta
-	get filename() {
-		if (!this.ptr) return '[no db open]';
-		const filename_ptr = sqlite3.sqlite3_db_filename(this.ptr, main_ptr);
-		return read_str(filename_ptr) || ':memory:';
+	filename(db_name = 'main') {
+		if (!this.ptr) return;
+		const name_ptr = (db_name == 'main') ? main_ptr : alloc_str(db_name);
+		try {
+			const filename_ptr = sqlite3.sqlite3_db_filename(this.ptr, main_ptr);
+			return read_str(filename_ptr) || ':memory:';
+		} finally {
+			if (name_ptr != main_ptr) sqlite3.free(name_ptr);
+		}
+	}
+	vfs(db_name = 'main') {
+		if (!this.ptr) return;
+
+		const name_ptr = (db_name == 'main') ? main_ptr : alloc_str(db_name);
+		const vfs_ptr_ptr = sqlite3.malloc(4);
+		try {
+			if (!vfs_ptr_ptr || !name_ptr) throw new OutOfMemError();
+			const res = sqlite3.sqlite3_file_control(this.ptr, name_ptr, SQLITE_FCNTL_VFS_POINTER, vfs_ptr_ptr);
+			handle_error(res);
+			const vfs_ptr = memdv().getInt32(vfs_ptr_ptr, true);
+			const vfs = vfs_impls.get(vfs_ptr)?.vfs;
+			return vfs;
+		} finally {
+			if (name_ptr != main_ptr) sqlite3.free(name_ptr);
+			sqlite3.free(vfs_ptr_ptr);
+		}
+	}
+	file(db_name = 'main') {
+		if (!this.ptr) return;
+
+		const name_ptr = (db_name == 'main') ? main_ptr : alloc_str(db_name);
+		const file_ptr_ptr = sqlite3.malloc(4);
+		try {
+			if (!file_ptr_ptr || !name_ptr) throw new OutOfMemError();
+			const res = sqlite3.sqlite3_file_control(this.ptr, name_ptr, SQLITE_FCNTL_FILE_POINTER, file_ptr_ptr);
+			handle_error(res);
+			const file_ptr = memdv().getInt32(file_ptr_ptr, true);
+			const file = file_impls.get(file_ptr)?.file;
+			return file;
+		} finally {
+			if (name_ptr != main_ptr) sqlite3.free(name_ptr);
+			sqlite3.free(file_ptr_ptr);
+		}
 	}
 	get interrupted() {
 		if (!this.ptr) return false;

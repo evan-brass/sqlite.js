@@ -9,6 +9,10 @@
 			padding: 0.5em;
 			font-size: 0.9em;
 		}
+		output {
+			background-color: #eee;
+			padding: 0.2em;
+		}
 		html {
 			font-size: 16px;
 			line-height: 1.5;
@@ -36,7 +40,7 @@
 <body>
 	<main>
 		<h1><a href="https://github.com/evan-brass/sql.mjs">sql.mjs</a> demo</h1>
-		<p><output id="dbname">[no db open]</output></p>
+		<p>VFS: <output id="vfsname"></output> Filename: <output id="dbname">[no db open]</output></p>
 		<p><textarea placeholder="SELECT 'Hello World!';"></textarea></p>
 		<button id="eval">Eval</button>
 		<pre id="output">Output:<br><output id="result"></output></pre>
@@ -63,8 +67,10 @@
 			const result = document.querySelector('#result');
 			const code = document.querySelector('textarea');
 			const dbname = document.querySelector('#dbname');
+			const vfsname = document.querySelector('#vfsname');
 			function update_ui() {
-				dbname.innerText = conn.filename;
+				dbname.innerText = conn.filename();
+				vfsname.innerText = conn.vfs()?.name;
 			}
 			update_ui();
 			function abort() {
