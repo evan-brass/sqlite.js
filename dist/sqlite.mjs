@@ -8,6 +8,10 @@ import { OutOfMemError } from './util.mjs';
 export const encoder = new TextEncoder();
 export const decoder = new TextDecoder();
 
+
+export const vfs_impls = new Map(); // ptr -> { vfs, errors }
+export const file_impls = new Map(); // ptr -> { file, errors }
+
 export let main_ptr;
 
 /**

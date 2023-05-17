@@ -7,7 +7,10 @@
  */
 import './basics.mjs';
 import { OutOfMemError } from "../util.mjs";
-import { sqlite3, imports, alloc_str, read_str, mem8, memdv, encoder, handle_error } from "../sqlite.mjs";
+import {
+	sqlite3, imports, alloc_str, read_str, mem8, memdv, encoder, handle_error,
+	vfs_impls, file_impls
+} from "../sqlite.mjs";
 import {
 	SQLITE_OK,
 	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ
@@ -17,9 +20,6 @@ import {
 class FakeFile {
 	close() { /* No Op */ }
 }
-
-const vfs_impls = new Map(); // ptr -> { vfs, errors }
-const file_impls = new Map(); // ptr -> { file, errors }
 
 export function register_vfs(vfs, make_default = false) {
 	const name_ptr = alloc_str(vfs.name);
