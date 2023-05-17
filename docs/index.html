@@ -9,6 +9,9 @@
 			padding: 0.5em;
 			font-size: 0.9em;
 		}
+		#interface {
+			margin: 1em;
+		}
 		output {
 			background-color: #eee;
 			padding: 0.2em;
@@ -27,10 +30,11 @@
 			width: 100%;
 			min-height: 10em;
 		}
-		#output {
+		#result {
+			display: block;
 			word-wrap: break-word;
 			white-space: break-spaces;
-			background-color: #eee;
+			/* background-color: #eee; */
 			padding: 1em;
 			border: 1px solid #aaa;
 		}
@@ -39,13 +43,18 @@
 </head>
 <body>
 	<main>
-		<h1><a href="https://github.com/evan-brass/sql.mjs">sql.mjs</a> demo</h1>
-		<p>VFS: <output id="vfsname"></output> Filename: <output id="dbname">[no db open]</output></p>
-		<p><textarea placeholder="SELECT 'Hello World!';"></textarea></p>
-		<button id="eval">Eval</button>
-		<pre id="output">Output:<br><output id="result"></output></pre>
+		<header>
+			<h1><a href="https://github.com/evan-brass/sql.mjs">sql.mjs</a></h1>
+			<p><a href="https://doc.deno.land/https://unpkg.com/sql.mjs">docs</a> (in-progress)</p>
+		</header>
+		<section id="interface">
+			<p>VFS: <output id="vfsname"></output> Filename: <output id="dbname"></output></p>
+			<p><textarea placeholder="SELECT 'Hello World!';"></textarea></p>
+			<button id="eval">Eval</button>
+			<p>Output:</p>
+			<pre><output id="result"></output></pre>
+		</section>
 		<script type="module">
-			// import { open as open_db, sqlite3, register_vfs, opfs, alloc_str, read_str, make_sql, AsObject } from 'https://unpkg.com/sql.mjs@0.3.1';
 			import {
 				Conn, open, backup,
 				SQLITE_OPEN_READONLY,
@@ -123,6 +132,7 @@
 			<li>List your todos: <code>SELECT title, description FROM todo ORDER BY priority DESC;</code></li>
 			<li>Do pragma things: <code>PRAGMA table_list;</code></li>
 		</ul>
+		<p>It's hard to see from this demo but the results are returned as a Row object.  As you can see, it has keys and values, but it is also iterable meaning you can use either object or array style destructuring.</p>
 
 		<h2>Non-memory Databases</h2>
 		<p>By default, you'll be connected to an in-memory database which will be lost on refresh.  You can change that by using the open command.</p>
@@ -131,17 +141,21 @@
 			<li><code>${open`test.db${'opfs'}`}</code></li>
 			<li><code>${open`file://localhost/test.db?vfs=opfs`}</code></li>
 		</ul>
+		<p>Using the open command will close any previous connection and open a new connection.  This resets any connection parameters like busy_timeout, registered functions, connection configurations, etc.</p>
 		<p>But we can do more interesting things.  These commands open databases using the open / save file pickers:</p>
 		<h3>Show the open file picker:</h3>
 		<ul>
-			<li><code>${open`open${'picker'}`}</code></li>
-			<li><code>${open`file://localhost?vfs=picker`}</code></li>
+			<li><code>${open`description${'picker'}`}</code></li>
+			<li><code>${open`open:description${'picker'}`}</code></li>
+			<li><code>${open`file://description?vfs=picker`}</code></li>
+			<li><code>${open`file://open:description?vfs=picker`}</code></li>
 		</ul>
 		<h3>Show the save file picker:</h3>
 		<ul>
-			<li><code>${open`file://suggested_name?vfs=picker&save=true`}</code></li>
+			<li><code>${open`file://save:suggested_name?vfs=picker`}</code></li>
 		</ul>
-		<p>For Origin-Private-File-System database files, writable permission is always granted.  For databases opened through the file pickers are readable.  Attempting to write to a file-picker database for the first time will trigger a browser permission prompt.  File pickers and permission prompts require that you call Conn.sql from a <a href="https://developer.mozilla.org/en-US/docs/Web/Security/User_activation">user gesture</a>.</p>
+		<p>For Origin-Private-File-System database files, writable permission is always granted.  But for files openned through the file pickers, the user will be prompted for the neccessary permissions on first use.  You'll need to make sure that the first read / write to the conn happens inside a <a href="https://developer.mozilla.org/en-US/docs/Web/Security/User_activation">user gesture</a>.  In the future, the required permissions might be requested on open instead of on first-use.</p>
+		<p>Notice that the picker VFS converts your open:/save: filename into a "filehandle:[number] - [filename]".  You can use "filehandle:[number]" to reopen a database that was previously openned using either the open or save file pickers.  The picker VFS stores file handles into an IndexedDB database.  Currently there's no way to list / manage that database but there will likely be ways of doing that in the future.</p>
 		<h3>Open Databases Over HTTP(S)</h3>
 		<ul>
 			<li><code>${open`file://cdn.jsdelivr.net/gh/alex-hofsteede/zipcode_db/zipcodes.sqlite?vfs=http&https=on`}</code></li>
@@ -155,7 +169,7 @@ INNER JOIN cities ON cities.id = zipcodes.city_id
 WHERE state_id = (SELECT id FROM states WHERE name = 'OR');</code></pre>
 		<p>This is a pretty long operation because (with this database's indexes) this requires a full table scan.  The HTTP VFS uses the Range header to do partial reads.  This database uses a 4.5kb page size, but a larger page size would probably be better.</p>
 		<p>The HTTP VFS doesn't support writable files.  The HTTP VFS tells sqlite that the file is immutable, meaning that bad things will happen if you modify the file while someone is reading it.  Luckily, the HTTP VFS performs a first HEAD request and follows redirects.  Subsequent reads will use the redirected URL so you can upgrade a database by uploading a new copy of the database and then migrating the redirect to the new file.</p>
-		<p>Changing the file underneath a reader should result in an IO error if your server supports etags or last-modified.  The exception to this is for empty databases, which are never fetched from again after the initial HEAD request.</p>
+		<p>Modifying a file while there is a reader should result in an IO error if your server supports etags or last-modified.  The exception to this is for empty databases files, which are never fetched again after the initial HEAD request.</p>
 		
 		<h2>Online Backup</h2>
 		<p>SQLite has a backup API which operates a few pages at a time to prevent blocking writers on the source database.  If you've been working in an in-memory database, then you can download a copy of your database using: <code>${backup(open`file://localhost/name?vfs=picker&save=true`)}</code></p>

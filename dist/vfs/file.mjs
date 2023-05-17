@@ -90,6 +90,8 @@ export class File {
 		if (this.#writable_stream) throw new Error('wat?');
 	}
 	async read(offset, len) {
+		const res = await this.#handle.requestPermission({mode: 'read'});
+		if (res != 'granted') throw new Error("Permission denied");
 		offset = Number(offset);
 		if (this.#writable_stream) throw new Error('wat?');
 		const file = await this.#handle.getFile();
@@ -98,6 +100,8 @@ export class File {
 		return data;
 	}
 	async write(buffer, offset) {
+		const res = await this.#handle.requestPermission({mode: 'readwrite'});
+		if (res != 'granted') throw new Error("Permission denied");
 		const position = Number(offset);
 		const stream = this.#writable_stream ?? await this.#handle.createWritable({keepExistingData: true});
 
