@@ -82,7 +82,7 @@ function vfs_wrapper(inner) {
 		const { vfs, errors } = entry;
 
 		try {
-			return await inner(vfs, ...args);
+			return await inner({vfs, errors, vfs_ptr}, ...args);
 		} catch (e) {
 			errors.push(e);
 			console.error(e);
@@ -97,7 +97,7 @@ function file_wrapper(inner) {
 		const { file, errors } = entry;
 
 		try {
-			return await inner(file, ...args);
+			return await inner({file, errors, file_ptr}, ...args);
 		} catch (e) {
 			errors.push(e);
 			console.error(e);
@@ -109,56 +109,54 @@ function file_wrapper(inner) {
 imports['vfs'] ??= {};
 Object.assign(imports['vfs'], {
 	// sqlite3_vfs methods:
-	xOpen: vfs_wrapper(async function xOpen(vfs, filename_ptr, file_out, flags, flags_out) {
+	xOpen: vfs_wrapper(async function xOpen({vfs, errors}, filename_ptr, file_out, flags, flags_out) {
 		const filename = new Filename(filename_ptr);
 		try {
 			const file = await vfs.open(filename, flags);
-			file_impls.set(file_out, { file, errors: vfs.errors });
+			file_impls.set(file_out, { file, errors });
 			memdv().setInt32(flags_out, file.flags, true);
 			return SQLITE_OK;
 		} catch (e) {
-			file_impls.set(file_out, { file: new FakeFile(), errors: vfs.errors });
+			file_impls.set(file_out, { file: new FakeFile(), errors });
 			throw e;
 		}
 	}),
-	xDelete: vfs_wrapper(async function xDelete(vfs, filename_ptr, sync) {
+	xDelete: vfs_wrapper(async function xDelete({vfs}, filename_ptr, sync) {
 		const filename = new Filename(filename_ptr);
 		try {
 			await vfs.delete(filename, sync);
 			return SQLITE_OK;
 		} catch (e) { return set_error(vfs, e); }
 	}),
-	xAccess: vfs_wrapper(async function xAccess(vfs, filename_ptr, flags, result_ptr) {
+	xAccess: vfs_wrapper(async function xAccess({vfs}, filename_ptr, flags, result_ptr) {
 		const filename = new Filename(filename_ptr);
 		const res = await vfs.access(filename, flags);
 		memdv().setInt32(result_ptr, res ? 1 : 0);
 		return SQLITE_OK;
 	}),
-	xFullPathname: vfs_wrapper(async function xFullPathname(vfs, filename_ptr, buff_len, buff_ptr) {
+	xFullPathname: vfs_wrapper(async function xFullPathname({vfs}, filename_ptr, buff_len, buff_ptr) {
 		const filename = read_str(filename_ptr);
 		let full = await vfs.full_pathname(filename);
 		if (!full.endsWith('\0')) full += '\0';
 		encoder.encodeInto(full, mem8(buff_ptr, buff_len));
 		return SQLITE_OK;
 	}),
-	xGetLastError(vfs_ptr, buff_len, buff_ptr) {
-		const { errors } = vfs_impls.get(vfs_ptr);
+	xGetLastError: vfs_wrapper(function xGetLastError({errors}, buff_len, buff_ptr) {
 		const e = errors[errors.length];
-		let msg = e ? `${e.name}: ${e.message}` : '<No Error>';
-		if (!msg.endsWith('\0')) msg += '\0';
+		let msg = e ? `${e.name}: ${e.message}\0` : '<No Error>\0';
 		encoder.encodeInto(msg, mem8(buff_ptr, buff_len));
 		return SQLITE_OK;
-	},
+	}),
 	// sqlite3_io_methods methods:
-	xClose(file_ptr) {
-		const ret = file_wrapper(async file => {
+	xClose: file_wrapper(async function xClose({file, file_ptr}) {
+		try {
 			await file.close();
 			return SQLITE_OK;
-		})(...arguments);
-		file_impls.delete(file_ptr);
-		return ret;
-	},
-	xRead: file_wrapper(async function xRead(file, buff_ptr, buff_len, offset) {
+		} finally {
+			file_impls.delete(file_ptr);
+		}
+	}),
+	xRead: file_wrapper(async function xRead({file}, buff_ptr, buff_len, offset) {
 		const read = await file.read(offset, buff_len);
 		mem8(buff_ptr, read.byteLength).set(read);
 		if (read.byteLength < buff_len) {
@@ -168,46 +166,44 @@ Object.assign(imports['vfs'], {
 		}
 		return SQLITE_OK;
 	}),
-	xWrite: file_wrapper(async function xWrite(file, buff_ptr, buff_len, offset) {
+	xWrite: file_wrapper(async function xWrite({file}, buff_ptr, buff_len, offset) {
 		await file.write(mem8(buff_ptr, buff_len), offset);
 		return SQLITE_OK;
 	}),
-	xTruncate: file_wrapper(async function xTruncate(file, size) {
+	xTruncate: file_wrapper(async function xTruncate({file}, size) {
 		await file.truncate(size);
 		return SQLITE_OK;
 	}),
-	xSync: file_wrapper(async function xSync(file, flags) {
+	xSync: file_wrapper(async function xSync({file}, flags) {
 		await file.sync(flags);
 		return SQLITE_OK;
 	}),
-	xFileSize: file_wrapper(async function xFileSize(file, size_ptr) {
+	xFileSize: file_wrapper(async function xFileSize({file}, size_ptr) {
 		const size = await file.size();
 		memdv().setBigInt64(size_ptr, BigInt(size), true);
 		return SQLITE_OK;
 	}),
-	xLock: file_wrapper(async function xLock(file, lock_level) {
+	xLock: file_wrapper(async function xLock({file}, lock_level) {
 		const res = await file.lock(lock_level);
 		return res ? SQLITE_OK : SQLITE_BUSY;
 	}),
-	xUnlock: file_wrapper(async function xUnlock(file, lock_level) {
+	xUnlock: file_wrapper(async function xUnlock({file}, lock_level) {
 		await file.unlock(lock_level);
 		return SQLITE_OK;
 	}),
-	xCheckReservedLock: file_wrapper(async function xCheckReservedLock(file, res_ptr) {
+	xCheckReservedLock: file_wrapper(async function xCheckReservedLock({file}, res_ptr) {
 		const res = await file.check_reserved_lock();
 		memdv().setInt32(res_ptr, Number(res), true);
 		return SQLITE_OK;
 	}),
-	xFileControl: file_wrapper(async function xFileControl(file, op, arg) {
+	xFileControl: file_wrapper(async function xFileControl({file}, op, arg) {
 		const res = await file.file_control(op, arg);
 		return res;
 	}),
-	xSectorSize(file_ptr) {
-		const { file } = file_impls.get(file_ptr);
+	xSectorSize: file_wrapper(function xSectorSize({file}) {
 		return file.sector_size;
-	},
-	xDeviceCharacteristics(file_ptr) {
-		const { file } = file_impls.get(file_ptr);
+	}),
+	xDeviceCharacteristics: file_wrapper(function xDeviceCharacteristics({file}) {
 		return file.device_characteristics();
-	}
+	})
 });
