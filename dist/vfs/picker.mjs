@@ -1,6 +1,6 @@
 import {
-	SQLITE_ACCESS_EXISTS,
-	SQLITE_OPEN_CREATE
+	SQLITE_OPEN_READONLY,
+	SQLITE_OPEN_READWRITE
 } from '../sqlite_def.mjs';
 import { File } from './file.mjs';
 // TODO: Remove this dependency:
@@ -17,6 +17,7 @@ const db_prom = openDB('picker.mjs:filehandles', 1, {
 export class Picker {
 	name = 'picker';
 	max_pathname = 64;
+	flags_filter = SQLITE_OPEN_READONLY | SQLITE_OPEN_READWRITE;
 	async open(filename, flags) {
 		const db = await db_prom;
 
@@ -27,6 +28,7 @@ export class Picker {
 		id = Number(id);
 
 		const handle = await db.get('handles', id);
+		// TODO: Shift permission request from read to open
 		return new File(handle, flags);
 	}
 	async delete(_filename, _sync) {

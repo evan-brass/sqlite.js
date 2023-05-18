@@ -19,15 +19,15 @@ function get_lock(name, options) {
 }
 
 export class File {
+	flags;
 	#handle;
 	#lock;
 	#res_lock;
 	#writable_stream;
-	flags = 0;
 	sector_size = 0;
-	constructor(handle, _flags) {
+	constructor(handle, flags) {
 		this.#handle = handle;
-		this.flags = 0;
+		this.flags = flags;
 	}
 	// Other:
 	device_characteristics() {
@@ -38,7 +38,7 @@ export class File {
 		return `opfs.mjs:${this.#handle.name}`;
 	}
 	get lock_name_res() {
-		return this.lock_name + '-r'
+		return this.lock_name + '-r';
 	}
 	async lock(level) {
 		if (level >= 1 && !this.#lock) {

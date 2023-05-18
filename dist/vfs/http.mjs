@@ -1,25 +1,22 @@
 import {
-	SQLITE_OK,
-	SQLITE_ACCESS_EXISTS,
-	SQLITE_FCNTL_BEGIN_ATOMIC_WRITE, SQLITE_FCNTL_COMMIT_ATOMIC_WRITE, SQLITE_FCNTL_ROLLBACK_ATOMIC_WRITE,
-	SQLITE_IOCAP_ATOMIC, SQLITE_IOCAP_BATCH_ATOMIC,
-	SQLITE_OPEN_CREATE, SQLITE_OPEN_DELETEONCLOSE, SQLITE_OPEN_READONLY,
+	SQLITE_OPEN_READONLY,
 	SQLITE_NOTFOUND,
-	SQLITE_IOCAP_IMMUTABLE
+	SQLITE_IOCAP_IMMUTABLE,
 } from '../sqlite_def.mjs';
 
 // Example DB: https://phiresky.github.io/world-development-indicators-sqlite/split-db/db.sqlite3.000
 
 export class HttpFile {
-	flags = SQLITE_OPEN_READONLY;
+	flags;
 	url;
 	headers;
 	sector_size = 0;
 	#size;
-	constructor(url, size, headers = {}) {
+	constructor(url, size, headers = {}, flags) {
 		this.url = url;
 		this.#size = size;
 		this.headers = headers;
+		this.flags = flags;
 	}
 	// IO:
 	device_characteristics() { return SQLITE_IOCAP_IMMUTABLE; }
@@ -46,7 +43,8 @@ export class HttpFile {
 export class Http {
 	name = 'http';
 	max_pathname = 128;
-	async open(filename, _flags) {
+	flags_filter = SQLITE_OPEN_READONLY;
+	async open(filename, flags) {
 		const secure = filename.get_parameter('https', location?.protocol == 'https');
 		filename = String(filename);
 		let url;
@@ -78,7 +76,7 @@ export class Http {
 			headers['If-Unmodified-Since'] = last_modified;
 		}
 
-		return new HttpFile(resp.url, size, headers);
+		return new HttpFile(resp.url, size, headers, flags | SQLITE_OPEN_READONLY);
 	}
 	async delete(filename, sync) { throw new Error('Unimplementable'); }
 	async access(filename, flags) { return false; }

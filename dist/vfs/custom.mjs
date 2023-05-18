@@ -13,13 +13,11 @@ import {
 } from "../sqlite.mjs";
 import {
 	SQLITE_OK,
-	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ
+	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READONLY, SQLITE_OPEN_READWRITE
 } from "../sqlite_def.mjs";
 
 // SQLite calls .close on files, even if they fail to open... but we don't get a file_impl unless the open succeeds, so FakeFile just stops that from being an error.
-class FakeFile {
-	close() { /* No Op */ }
-}
+class FakeFile { close() { /* No Op */ } }
 
 export function register_vfs(vfs, make_default = false) {
 	const name_ptr = alloc_str(vfs.name);
@@ -111,14 +109,14 @@ Object.assign(imports['vfs'], {
 	// sqlite3_vfs methods:
 	xOpen: vfs_wrapper(async function xOpen({vfs, errors}, filename_ptr, file_out, flags, flags_out) {
 		const filename = new Filename(filename_ptr);
+		const filter = SQLITE_OPEN_EXRESCODE | (vfs.flags_filter ?? (SQLITE_OPEN_READONLY | SQLITE_OPEN_READWRITE));
+		let file;
 		try {
-			const file = await vfs.open(filename, flags);
-			file_impls.set(file_out, { file, errors });
+			file = await vfs.open(filename, flags & filter);
 			memdv().setInt32(flags_out, file.flags, true);
 			return SQLITE_OK;
-		} catch (e) {
-			file_impls.set(file_out, { file: new FakeFile(), errors });
-			throw e;
+		} finally {
+			file_impls.set(file_out, { file: file ?? new FakeFile(), errors });
 		}
 	}),
 	xDelete: vfs_wrapper(async function xDelete({vfs}, filename_ptr, sync) {

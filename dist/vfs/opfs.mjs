@@ -1,6 +1,7 @@
 import {
 	SQLITE_ACCESS_EXISTS,
-	SQLITE_OPEN_CREATE
+	SQLITE_OPEN_CREATE,
+	SQLITE_OPEN_DELETEONCLOSE
 } from '../sqlite_def.mjs';
 import { File } from './file.mjs';
 
@@ -22,6 +23,7 @@ async function descend(filename, flags) {
 export class Opfs {
 	name = 'opfs';
 	max_pathname = 128;
+	flags_filter = SQLITE_OPEN_CREATE | SQLITE_OPEN_DELETEONCLOSE;
 	async open(filename, flags) {
 		const handle = await descend(filename, flags);
 		return new File(handle, flags);
