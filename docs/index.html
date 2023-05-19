@@ -52,6 +52,9 @@
 			<p>Output:</p>
 			<pre><output id="result"></output></pre>
 		</section>
+		<script type="importmap">{ "imports": {
+			"sql.mjs": "https://unpkg.com/sql.mjs"
+		}}</script>
 		<script type="module">
 			import {
 				Conn, open, backup,
@@ -66,7 +69,7 @@
 				SQLITE_OPEN_PRIVATECACHE,
 				SQLITE_OPEN_NOFOLLOW,
 				SQLITE_OPEN_EXRESCODE,
-			} from '/dist/index.mjs';
+			} from 'sql.mjs';
 
 			const conn = new Conn();
 
