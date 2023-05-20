@@ -17,6 +17,7 @@
 			font-size: 16px;
 			line-height: 1.5;
 			font-family: sans-serif;
+			tab-size: 4ch;
 		}
 		main {
 			max-width: 90ch;
@@ -57,7 +58,7 @@
 		}}</script>
 		<script type="module">
 			import {
-				Conn, open, backup,
+				Conn, OpenParams, SqlCommand,
 				SQLITE_OPEN_READONLY,
 				SQLITE_OPEN_READWRITE,
 				SQLITE_OPEN_CREATE,
@@ -70,6 +71,37 @@
 				SQLITE_OPEN_NOFOLLOW,
 				SQLITE_OPEN_EXRESCODE,
 			} from 'sql.mjs';
+
+			export function backup(dest, props) {
+				return {
+					async [SqlCommand](src) {
+						for await (const {remaining, count} of src.backup(dest, props)) {
+							console.log('backup', remaining, '/', count);
+						}
+					}
+				};
+			}
+			// This function doesn't actually open a database, it just fills out an OpenParams object from a template
+			export function open(strings, ...args) {
+				let seen_int = false;
+				const ret = new OpenParams();
+				ret.pathname = strings[0];
+				for (let i = 0; i < args.length; ++i) {
+					ret.pathname += strings[i + 1];
+					const arg = args[i];
+					if (typeof arg == 'number') {
+						if (!seen_int) {
+							ret.flags = 0;
+							seen_int = true;
+						}
+						ret.flags |= arg;
+					}
+					else if (typeof arg == 'string') {
+						ret.vfs = arg;
+					}
+				}
+				return ret;
+			}
 
 			const conn = new Conn();
 

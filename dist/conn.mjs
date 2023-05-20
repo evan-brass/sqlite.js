@@ -9,16 +9,6 @@ import {
 
 export const SqlCommand = new Trait("This trait marks special commands which can be used inside template literals tagged with the Conn.sql tag.");
 
-export function backup(dest, props) {
-	return {
-		async [SqlCommand](src) {
-			for await (const {remaining, count} of src.backup(dest, props)) {
-				console.log('backup', remaining, '/', count);
-			}
-		}
-	};
-}
-
 export class OpenParams {
 	pathname = ":memory:";
 	flags = SQLITE_OPEN_URI | SQLITE_OPEN_CREATE | SQLITE_OPEN_EXRESCODE | SQLITE_OPEN_READWRITE
@@ -26,27 +16,6 @@ export class OpenParams {
 	async [SqlCommand](conn) {
 		await conn.open(this);
 	}
-}
-// This function doesn't actually open a database, it just fills out an OpenParams object from a template
-export function open(strings, ...args) {
-	let seen_int = false;
-	const ret = new OpenParams();
-	ret.pathname = strings[0];
-	for (let i = 0; i < args.length; ++i) {
-		ret.pathname += strings[i + 1];
-		const arg = args[i];
-		if (typeof arg == 'number') {
-			if (!seen_int) {
-				ret.flags = 0;
-				seen_int = true;
-			}
-			ret.flags |= arg;
-		}
-		else if (typeof arg == 'string') {
-			ret.vfs = arg;
-		}
-	}
-	return ret;
 }
 
 function is_safe(int) {
