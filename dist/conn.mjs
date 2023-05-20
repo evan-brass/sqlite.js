@@ -13,6 +13,7 @@ export class OpenParams {
 	pathname = ":memory:";
 	flags = SQLITE_OPEN_URI | SQLITE_OPEN_CREATE | SQLITE_OPEN_EXRESCODE | SQLITE_OPEN_READWRITE
 	vfs = "";
+	constructor() { Object.assign(this, ...arguments); }
 	async [SqlCommand](conn) {
 		await conn.open(this);
 	}

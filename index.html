@@ -7,11 +7,11 @@
 }}</script>
 <script type="module">
 	import {
-		Conn, open, exec, SqliteBlob
+		Conn, OpenParams, exec, SqliteBlob
 	} from 'sql.mjs';
 
 	const conn = new Conn();
-	await conn.open(open`test.db`);
+	await conn.open(new OpenParams({pathname: 'test.db'}));
 
 	// Create the files tables
 	await exec(conn.sql`
