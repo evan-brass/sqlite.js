@@ -169,7 +169,7 @@ Object.assign(imports['vfs'], {
 		return SQLITE_OK;
 	}),
 	xTruncate: file_wrapper(async function xTruncate({file}, size) {
-		await file.truncate(size);
+		await file.trunc(size);
 		return SQLITE_OK;
 	}),
 	xSync: file_wrapper(async function xSync({file}, flags) {
