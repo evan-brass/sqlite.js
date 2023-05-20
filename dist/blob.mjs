@@ -1,105 +1,100 @@
-import { alloc_str, handle_error, mem8, memdv, sqlite3 } from './sqlite.mjs';
+import { alloc_str, handle_error, mem8, memdv, sqlite3, main_ptr } from './sqlite.mjs';
 import { OutOfMemError } from './util.mjs';
 
-export async function blob_open(conn, table, column, rowid, {db = 'main', writable = true} = {}) {
-	let blob_ptr;
-	if (typeof rowid != 'bigint') {
-		rowid = BigInt(rowid);
-	}
+export class SqliteBlob {
+	conn;
+	buffer_ptr;
+	buffer_size;
+	ptr;
+	writable;
+	offset;
+	len;
+	constructor() { Object.assign(this, ...arguments); }
+	static async open(conn, table, column, rowid, writable = true, { db_name = 'main', buffer_size = 1024, offset = 0, len} = {}) {
+		const buffer_ptr = sqlite3.malloc(buffer_size);
+		const blob_ptr = sqlite3.malloc(4);
+		const name_ptr = (db_name == 'main') ? main_ptr : alloc_str(db_name);
+		const table_ptr = alloc_str(table);
+		const column_ptr = alloc_str(column);
 
-	const blob_ptr_ptr = sqlite3.malloc(4);
-	const table_ptr = alloc_str(table);
-	const column_ptr = alloc_str(column);
-	const db_ptr = alloc_str(db);
-	try {
-		if (!blob_ptr_ptr || !table_ptr || !column_ptr || !db_ptr) throw new OutOfMemError();
+		let blob = 0;
+		try {
+			if (!buffer_ptr || !blob_ptr || !name_ptr || !table_ptr || !column_ptr) throw new OutOfMemError();
+			memdv().setInt32(blob_ptr, 0, true); // Not sure if this is neccessary
 
-		const res = await sqlite3.sqlite3_blob_open(conn, db_ptr, table_ptr, column_ptr, rowid, Number(writable), blob_ptr_ptr);
-		blob_ptr = memdv().getInt32(blob_ptr_ptr, true);
-		handle_error(res, conn);
+			const res = await sqlite3.sqlite3_blob_open(conn.ptr, name_ptr, table_ptr, column_ptr, BigInt(rowid), Number(writable), blob_ptr);
+			blob = memdv().getInt32(blob_ptr, true);
+			handle_error(res, conn.ptr);
 
-		return blob_ptr;
-	} catch (e) {
-		sqlite3.sqlite3_blob_close(blob_ptr);
-		throw e;
-	} finally {
-		sqlite3.free(blob_ptr_ptr);
-		sqlite3.free(table_ptr);
-		sqlite3.free(column_ptr);
-		sqlite3.free(db_ptr);
-	}
-}
-async function close(blob_ptr, buffer_ptr, auto_close) {
-	sqlite3.free(buffer_ptr);
-	if (auto_close) {
-		const res = await sqlite3.sqlite3_blob_close(blob_ptr);
-		handle_error(res, conn);
-	}
-}
-export function blob_read_source(blob, {buffer_size = 1024, offset = 0, length, auto_close = true} = {}) {
-	const buffer_ptr = sqlite3.malloc(buffer_size);
-	if (!buffer_ptr) throw new OutOfMemError();
+			len ??= sqlite3.sqlite3_blob_bytes(blob);
 
-	return {
-		type: 'bytes',
-		autoAllocateChunkSize: buffer_size,
-		async pull(controller) {
-			if (typeof length != 'number') {
-				length = sqlite3.sqlite3_blob_bytes(blob);
-			}
-			if (length == 0) {
-				controller.close();
-				if (auto_close) await close(blob, buffer_ptr, auto_close);
-				return;
-			}
-	
-			if (controller.byobRequest) {
-				const num_to_read = Math.min(controller.byobRequest.view.byteLength, length, buffer_size);
-				const res = await sqlite3.sqlite3_blob_read(blob, buffer_ptr, num_to_read, offset);
-				handle_error(res, conn);
-				length -= num_to_read;
-				offset += num_to_read;
-	
-				const ret = mem8(buffer_ptr, num_to_read);
-				const view = controller.byobRequest.view;
-				if (ret.byteLength > view.byteLength) throw new Error('wat?');
-				new Uint8Array(view.buffer, view.byteOffset, ret.byteLength).set(ret);
-				controller.byobRequest.respond(ret.byteLength);
-			} else {
-				throw new Error('not implemented yet.');
-				controller.enqueue(ret); // Should this buffer be sliced?
-			}
-		},
-		async cancel(_reason) {
-			await close(blob, buffer_ptr, auto_close);
+			return new this({conn, buffer_ptr, buffer_size, ptr: blob, writable, offset, len});
+		} catch (e) {
+			const res = await sqlite3.sqlite3_blob_close(blob); // Does this need to be awaited?
+			handle_error(res, conn.ptr);
+			throw e;
+		} finally {
+			sqlite3.free(blob_ptr);
+			if (name_ptr != main_ptr) sqlite3.free(name_ptr);
+			sqlite3.free(table_ptr);
+			sqlite3.free(column_ptr);
 		}
-	};
-}
-export function blob_write_source(blob, {buffer_size = 1024, offset = 0, length, auto_close = true} = {}) {
-	const buffer_ptr = sqlite3.malloc(buffer_size);
-	if (!buffer_ptr) throw new OutOfMemError();
-	return {
-		async write(chunk, controller) {
-			if (typeof length != 'number') {
-				length = sqlite3.sqlite3_blob_bytes(blob);
+	}
+	async close() {
+		const res = await sqlite3.sqlite3_blob_close(this.ptr);
+		this.ptr = 0;
+		handle_error(res, this.conn.ptr);
+	}
+	get buffer() {
+		return mem8(this.buffer_ptr, Math.min(this.buffer_size, this.len));
+	}
+	get done() {
+		return this.len == 0;
+	}
+	async reopen(rowid) {
+		const res = await sqlite3.sqlite3_blob_reopen(this.ptr, rowid);
+		handle_error(res, this.conn.ptr);
+	}
+	bytes() {
+		return sqlite3.sqlite3_blob_bytes(this.ptr);
+	}
+	async read(len = Math.min(this.buffer_size, this.len)) {
+		const res = await sqlite3.sqlite3_blob_read(this.ptr, this.buffer_ptr, len, this.offset);
+		handle_error(res, this.conn.ptr);
+		this.offset += len; this.len -= len;
+		return mem8(this.buffer_ptr, len);
+	}
+	async write(len = Math.min(this.buffer_size, this.len)) {
+		const res = await sqlite3.sqlite3_blob_write(this.ptr, this.buffer_ptr, len, this.offset);
+		handle_error(res, this.conn.ptr);
+		this.offset += len; this.len -= len;
+	}
+	async write_from(readable_stream) {
+		const reader = readable_stream.getReader({mod: 'byob'});
+		try {
+			while (!this.done) {
+				const { value, done } = await reader.read(this.buffer);
+				if (value) {
+					await this.write(value.byteLength);
+				}
+				if (done) break;
 			}
-
-			for (let chunk_remainder = chunk.byteLength; chunk_remainder;) {
-				if (length == 0) throw new Error("Can't write past the end of the BlobSource's length");
-				const num_to_write = Math.min(chunk_remainder, length, buffer_size);
-				const segment = new Uint8Array(chunk.buffer, chunk.byteOffset + chunk.byteLength - chunk_remainder, num_to_write);
-				// Put the segment into wasm memory
-				mem8(buffer_ptr, num_to_write).set(segment);
-	
-				const res = await sqlite3.sqlite3_blob_write(blob, buffer_ptr, num_to_write, offset);
-				handle_error(res);
-				length -= num_to_write;
-				offset += num_to_write;
-				chunk_remainder -= num_to_write;
-			}
-		},
-		async close(_controller) {
-			await close(blob, buffer_ptr, auto_close);
+		} finally {
+			reader.releaseLock();
 		}
-	};
+	}
+	async read_into(writable_stream) {
+		const writer = writable_stream.getWriter();
+		try {
+			while (!this.done) {
+				await writer.ready;
+				const buff = await this.read(); // Do I need to slice the buff?
+				await writer.write(buff);
+			}
+			await writer.ready;
+			await writer.close();
+		} finally {
+			writer.releaseLock();
+		}
+	}
 }
