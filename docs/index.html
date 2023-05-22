@@ -53,7 +53,7 @@
 			<pre><output id="result"></output></pre>
 		</section>
 		<script type="importmap">{ "imports": {
-			"sql.mjs": "https://unpkg.com/sql.mjs"
+			"sql.mjs": "https://unpkg.com/sql.mjs@0.14.1"
 		}}</script>
 		<script type="module">
 			import {
@@ -156,7 +156,7 @@
 			<li><code>${open`file://save:suggested_name?vfs=picker`}</code></li>
 		</ul>
 		<p>For Origin-Private-File-System database files, writable permission is always granted.  But for files openned through the file pickers, the user will be prompted for the neccessary permissions on first use.  You'll need to make sure that the first read / write to the conn happens inside a <a href="https://developer.mozilla.org/en-US/docs/Web/Security/User_activation">user gesture</a>.  In the future, the required permissions might be requested on open instead of on first-use.</p>
-		<p>Notice that the picker VFS converts your open:/save: filename into a "filehandle:[number] - [filename]".  You can use "filehandle:[number]" to reopen a database that was previously openned using either the open or save file pickers.  The picker VFS stores file handles into an IndexedDB database.  Currently there's no way to list / manage that database but there will likely be ways of doing that in the future.</p>
+		<p>Notice that the picker VFS converts your open:/save: filename into a "filehandle:[number] - [filename]".  You can use "filehandle:[number]" to reopen a database that was previously openned using either the open or save file pickers (This currently only works in Chrome).  The picker VFS stores file handles into an IndexedDB database.  Currently there's no way to list / manage that database but there will likely be ways of doing that in the future.</p>
 		<h3>Open Databases Over HTTP(S)</h3>
 		<ul>
 			<li><code>${open`file://cdn.jsdelivr.net/gh/alex-hofsteede/zipcode_db/zipcodes.sqlite?vfs=http&https=on`}</code></li>
