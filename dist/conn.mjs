@@ -30,7 +30,7 @@ class Bindings {
 		for (let i = 0; i < args.length; ++i) {
 			const arg = args[i];
 			this.inner.push(arg);
-			if ((typeof arg != 'object' && typeof arg != 'function') || arg instanceof ArrayBuffer || ArrayBuffer.isView(arg)) {
+			if ((typeof arg != 'object' && typeof arg != 'function') || arg === null || arg instanceof ArrayBuffer || ArrayBuffer.isView(arg)) {
 				ret += '?';
 			}
 			ret += strings[i + 1];
@@ -72,14 +72,15 @@ class Bindings {
 				named ??= this.next_named();
 				arg = named[key]
 			}
-			const kind = typeof arg;
+			let kind = typeof arg;
 			if (kind == 'boolean') {
 				arg = Number(arg);
 			}
+			kind = typeof arg;
 			if (arg instanceof ArrayBuffer) {
 				arg = new Uint8Array(arg);
 			}
-			if (arg === null || typeof arg == 'undefined') {
+			else if (arg === null || typeof arg == 'undefined') {
 				sqlite3.sqlite3_bind_null(stmt, i);
 			}
 			else if (kind == 'bigint') {
