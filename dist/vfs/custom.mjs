@@ -37,6 +37,9 @@ class Filename {
 		this.#ptr = ptr;
 	}
 	[Symbol.toPrimitive](_hint) {
+		if (this.#ptr == 0) {
+			return crypto.getRandomValues(new Uint8Array(8)).reduce((a, i) => a + i.toString(16).padStart(2, '0')) + '.tmp';
+		}
 		return read_str(this.#ptr);
 	}
 	get_parameter(param, def_val) {
@@ -121,10 +124,8 @@ Object.assign(imports['vfs'], {
 	}),
 	xDelete: vfs_wrapper(async function xDelete({vfs}, filename_ptr, sync) {
 		const filename = new Filename(filename_ptr);
-		try {
-			await vfs.delete(filename, sync);
-			return SQLITE_OK;
-		} catch (e) { return set_error(vfs, e); }
+		await vfs.delete(filename, sync);
+		return SQLITE_OK;
 	}),
 	xAccess: vfs_wrapper(async function xAccess({vfs}, filename_ptr, flags, result_ptr) {
 		const filename = new Filename(filename_ptr);

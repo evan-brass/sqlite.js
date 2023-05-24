@@ -8,7 +8,7 @@ import { File } from './file.mjs';
 async function descend(filename, flags) {
 	if (String(filename).startsWith('//')) throw new Error("The origin private file system doesn't support files with custom authorities.");
 	let handle = await navigator.storage.getDirectory();
-	const create = Boolean(flags & SQLITE_OPEN_CREATE);
+	const create = Boolean(flags & SQLITE_OPEN_CREATE) || Boolean(flags & SQLITE_OPEN_DELETEONCLOSE);
 	const path = String(filename).split('/');
 	while (path.length) {
 		const part = path.shift();

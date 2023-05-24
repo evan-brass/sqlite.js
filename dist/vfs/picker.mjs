@@ -1,8 +1,11 @@
 import {
+	SQLITE_OPEN_DELETEONCLOSE,
 	SQLITE_OPEN_READONLY,
 	SQLITE_OPEN_READWRITE
 } from '../sqlite_def.mjs';
 import { File } from './file.mjs';
+import {default as opfs} from './opfs.mjs';
+
 // TODO: Remove this dependency:
 import { openDB } from 'https://unpkg.com/idb/build/index.js';
 
@@ -17,9 +20,14 @@ const db_prom = openDB('picker.mjs:filehandles', 1, {
 export class Picker {
 	name = 'picker';
 	max_pathname = 64;
-	flags_filter = SQLITE_OPEN_READONLY | SQLITE_OPEN_READWRITE;
+	flags_filter = SQLITE_OPEN_READONLY | SQLITE_OPEN_READWRITE | SQLITE_OPEN_DELETEONCLOSE;
 	async open(filename, flags) {
 		const db = await db_prom;
+
+		if (String(filename).endsWith('.tmp')) {
+			// pass temp files to the opfs filesystem:
+			return await opfs.open(...arguments);
+		}
 
 		const [command, rest] = String(filename).split(':');
 		if (command != 'filehandle') throw new Error('yikes.');
