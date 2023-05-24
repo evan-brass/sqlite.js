@@ -273,6 +273,10 @@ export class Conn {
 		if (!this.ptr) return false;
 		return Boolean(sqlite3.sqlite3_is_interrupted(this.ptr));
 	}
+	get autocommit() {
+		if (!this.ptr) return true;
+		return Boolean(sqlite3.sqlite3_get_autocommit(this.ptr));
+	}
 	interrupt() {
 		if (this.ptr) {
 			sqlite3.sqlite3_interrupt(this.ptr);

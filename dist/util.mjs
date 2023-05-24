@@ -16,7 +16,7 @@ export class Trait {
 		return this.symbol;
 	}
 	get [Symbol.toStringTag]() {
-		return `Trait(${this.symbol.description})`
+		return `Trait(${this.symbol.description})`;
 	}
 	[Symbol.hasInstance](target) {
 		return typeof target == 'object' && target !== null && target[this.symbol] !== undefined;

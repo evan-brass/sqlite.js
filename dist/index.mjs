@@ -7,6 +7,7 @@ export * from './asyncify.mjs';
 export * from './func.mjs';
 export * from './conn.mjs';
 export * from './blob.mjs';
+export * from './pool.mjs';
 export {sqlite3, vfs};
 
 export const initialized = (async () => {
