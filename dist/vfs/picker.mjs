@@ -6,16 +6,10 @@ import {
 import { File } from './file.mjs';
 import {default as opfs} from './opfs.mjs';
 
-// TODO: Remove this dependency:
-import { openDB } from 'https://unpkg.com/idb/build/index.js';
+// Instead of the picker VFS storing the file handle into
+export const handles = new Map(); // key (string) -> FileSystemFileHandle
 
-// TODO: Use an indexeddb database to store the previous file handles.
-const db_prom = openDB('picker.mjs:filehandles', 1, {
-	upgrade(db) {
-		db.createObjectStore('handles', {autoIncrement: true});
-	}
-});
-
+const accept = {'application/sqlite*': ['.sqlite', '.sqlite3', '.db', '.db3']};
 
 export class Picker {
 	name = 'picker';
@@ -30,12 +24,26 @@ export class Picker {
 		}
 
 		const [command, rest] = String(filename).split(':');
-		if (command != 'filehandle') throw new Error('yikes.');
+		command = command.toLocaleLowerCase();
+		let handle;
+		if (command == 'save') {
+			const suggestedName = rest;
+			handle = await showSaveFilePicker({
+				suggestedName,
+				types: [{ description: 'SQLite Database', accept }]
+			});
+		}
+		else if (command == 'filehandle') {
+			handle = handles.get(rest);
+		}
+		else {
+			const description = rest;
+			[handle] = await showOpenFilePicker({
+				multiple: false,
+				types: [{ description, accept }]
+			});
+		}
 
-		let [id, _] = rest.split('-');
-		id = Number(id);
-
-		const handle = await db.get('handles', id);
 		// TODO: Shift permission request from read to open
 		return new File(handle, flags);
 	}
@@ -45,42 +53,6 @@ export class Picker {
 	async access(_filename, _flags) {
 		return false;
 	}
-	async full_pathname(pathname) {
-		const db = await db_prom;
-
-		pathname = pathname.replace(/^.*\//, '');
-
-		let [command, rest] = pathname.split(':');
-		command = command.toLocaleLowerCase();
-		
-		let handle, id;
-		if (command == 'save') {
-			const suggestedName = rest;
-			handle = await showSaveFilePicker({
-				suggestedName,
-				types: [{
-					description: 'SQLite Database', accept: {'application/sqlite*': ['.sqlite', '.sqlite3', '.db', '.db3']}
-				}]
-			});
-			id = await db.add('handles', handle);
-		}
-		else if (command == 'filehandle') {
-			[id] = rest.split('-');
-			id = Number(id);
-			handle = await db.get('handles', id);
-		}
-		else {
-			const description = rest;
-			[handle] = await showOpenFilePicker({
-				multiple: false,
-				types: [{
-					description, accept: {'application/sqlite*': ['.sqlite', '.sqlite3', '.db', '.db3']}
-				}]
-			});
-			id = await db.add('handles', handle);
-		}
-
-		return `filehandle:${id} - ${handle.name}`;
-	}
+	async full_pathname(pathname) { return pathname }
 }
 export default new Picker();

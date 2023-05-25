@@ -29,6 +29,10 @@ export class File {
 		this.#handle = handle;
 		this.flags = flags;
 	}
+	get handle() {
+		return this.#handle;
+	}
+
 	// Other:
 	device_characteristics() {
 		return SQLITE_IOCAP_ATOMIC | SQLITE_IOCAP_BATCH_ATOMIC;
