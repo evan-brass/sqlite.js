@@ -1,5 +1,6 @@
 import { alloc_str, handle_error, mem8, read_str, sqlite3 } from "./sqlite.mjs";
 import { SQLITE3_TEXT, SQLITE_BLOB, SQLITE_FLOAT, SQLITE_INTEGER, SQLITE_NULL } from "./sqlite_def.mjs";
+import { is_safe } from "./util.mjs";
 
 export class Value {
 	#ptr;
@@ -9,11 +10,18 @@ export class Value {
 		this.#ptr = ptr;
 	}
 	get natural() {
-		if (this.typ == SQLITE_INTEGER) return this.bigint;
+		if (this.typ == SQLITE_INTEGER) {
+			const ret = this.bigint;
+			if (is_safe(ret)) return Number(ret);
+			return ret;
+		}
 		if (this.typ == SQLITE_FLOAT) return this.number;
 		if (this.typ == SQLITE_BLOB) return this.blob;
 		if (this.typ == SQLITE_NULL) return null;
 		if (this.typ == SQLITE3_TEXT) return this.string;
+	}
+	toJSON() {
+		return this.natural;
 	}
 	[Symbol.toPrimitive](hint) {
 		if (hint == 'number') {
@@ -21,7 +29,9 @@ export class Value {
 			else if (this.typ == SQLITE_FLOAT) return this.number;
 			else {
 				if (this.numtyp == SQLITE_INTEGER) {
-					return this.bigint;
+					const ret = this.bigint;
+					if (is_safe(ret)) return Number(ret);
+					return ret;
 				} else {
 					return this.number;
 				}
