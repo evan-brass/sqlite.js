@@ -229,7 +229,8 @@ export class Conn {
 		if (!this.ptr) return;
 		const name_ptr = (db_name == 'main') ? main_ptr : alloc_str(db_name);
 		try {
-			const filename_ptr = sqlite3.sqlite3_db_filename(this.ptr, main_ptr);
+			if (!name_ptr) throw new OutOfMemError();
+			const filename_ptr = sqlite3.sqlite3_db_filename(this.ptr, name_ptr);
 			return read_str(filename_ptr) || ':memory:';
 		} finally {
 			if (name_ptr != main_ptr) sqlite3.free(name_ptr);
