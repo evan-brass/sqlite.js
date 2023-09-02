@@ -6,6 +6,7 @@ import {
 	SQLITE_FCNTL_VFS_POINTER, SQLITE_FCNTL_FILE_POINTER,
 	SQLITE_INTEGER, SQLITE_FLOAT, SQLITE3_TEXT, SQLITE_BLOB, SQLITE_NULL
 } from "./sqlite_def.mjs";
+import { JsValue, RowValue, Value } from './value.mjs';
 
 export const SqlCommand = new Trait("This trait marks special commands which can be used inside template literals tagged with the Conn.sql tag.");
 
@@ -68,79 +69,37 @@ class Bindings {
 				named ??= this.next_named();
 				arg = named[key]
 			}
-			let kind = typeof arg;
-			if (kind == 'boolean') {
-				arg = Number(arg);
+			let value;
+			if (arg instanceof Value) {
+				value = arg;
+			} else {
+				value = new JsValue(arg);
 			}
-			kind = typeof arg;
-			if (arg instanceof ArrayBuffer) {
-				arg = new Uint8Array(arg);
-			}
-			else if (arg === null || typeof arg == 'undefined') {
-				sqlite3.sqlite3_bind_null(stmt, i);
-			}
-			else if (kind == 'bigint') {
-				sqlite3.sqlite3_bind_int64(stmt, i, arg);
-			}
-			else if (kind == 'number') {
-				sqlite3.sqlite3_bind_double(stmt, i, arg);
-			}
-			else if (kind == 'string') {
-				const encoded = encoder.encode(arg);
-				const ptr = sqlite3.malloc(encoded.byteLength);
-				if (!ptr) throw new OutOfMemError();
-				mem8(ptr, encoded.byteLength).set(encoded);
-				sqlite3.sqlite3_bind_text(stmt, i, ptr, encoded.byteLength, sqlite3.free_ptr());
-			}
-			else if (ArrayBuffer.isView(arg)) {
-				const ptr = sqlite3.malloc(arg.byteLength);
-				if (!ptr) throw new OutOfMemError();
-				mem8(ptr, arg.byteLength).set(new Uint8Array(arg.buffer, arg.byteOffset, arg.byteLength));
-				sqlite3.sqlite3_bind_blob(stmt, i, ptr, arg.byteLength, sqlite3.free_ptr());
-			}
-			else {
-				throw new Error('Unknown parameter type.');
-			}
+			value.bind(stmt, i);
 		}
 	}
 }
 
 class Row {
-	#column_names = [];
+	#key_names = [];
 	constructor(stmt) {
 		const data_count = sqlite3.sqlite3_data_count(stmt);
 
 		for (let i = 0; i < data_count; ++i) {
-			const type = sqlite3.sqlite3_column_type(stmt, i);
-			let val;
-			if (type == SQLITE_INTEGER) {
-				const int = sqlite3.sqlite3_column_int64(stmt, i);
-				val = is_safe(int) ? Number(int) : int;
-			}
-			else if (type == SQLITE_FLOAT) {
-				val = sqlite3.sqlite3_column_double(stmt, i);
-			}
-			else if (type == SQLITE3_TEXT) {
-				const len = sqlite3.sqlite3_column_bytes(stmt, i);
-				val = read_str(sqlite3.sqlite3_column_text(stmt, i), len);
-			}
-			else if (type == SQLITE_BLOB) {
-				const len = sqlite3.sqlite3_column_bytes(stmt, i);
-				val = mem8(sqlite3.sqlite3_column_blob(stmt, i), len).slice();
-			}
-			else if (type == SQLITE_NULL) {
-				val = null;
-			}
 			const column_name = read_str(sqlite3.sqlite3_column_name(stmt, i));
-			this.#column_names[i] = column_name;
-			this[column_name] = val;
+			let key = column_name;
+			for (let key_i = 2; key in this; ++key_i) {
+				key = column_name + String(key_i);
+			}
+			this[key] = new RowValue(stmt, i);
+			this.#key_names.push(key);
 		}
 	}
-	get column_names() {
-		return this.#column_names;
+	get key_names() {
+		return this.#key_names;
 	}
 	*[Symbol.iterator]() {
-		for (const key of this.#column_names) {
+		for (const key of this.#key_names) {
 			yield this[key];
 		}
 	}
