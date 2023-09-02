@@ -1,4 +1,4 @@
-import { alloc_str, mem8, read_str, sqlite3 } from "./sqlite.mjs";
+import { alloc_str, handle_error, mem8, read_str, sqlite3 } from "./sqlite.mjs";
 import { SQLITE3_TEXT, SQLITE_BLOB, SQLITE_FLOAT, SQLITE_INTEGER, SQLITE_NULL } from "./sqlite_def.mjs";
 
 export class Value {
@@ -58,7 +58,8 @@ export class Value {
 		return mem8(ptr, len);
 	}
 	bind(stmt, i) {
-		sqlite3.sqlite3_bind_value(stmt, i, this.#ptr);
+		const res = sqlite3.sqlite3_bind_value(stmt, i, this.#ptr);
+		handle_error(res, sqlite3.sqlite3_db_handle(stmt));
 	}
 }
 export class RowValue extends Value {
@@ -94,7 +95,8 @@ export class RowValue extends Value {
 	}
 	bind(stmt, i) {
 		const ptr = sqlite3.sqlite3_column_value(this.#stmt, this.#i);
-		sqlite3.sqlite3_bind_value(stmt, i, ptr);
+		const res = sqlite3.sqlite3_bind_value(stmt, i, ptr);
+		handle_error(res, sqlite3.sqlite3_db_handle(stmt));
 	}
 }
 export class JsValue extends Value {
@@ -108,32 +110,44 @@ export class JsValue extends Value {
 	bind(stmt, i) {
 		let inner = this.#inner;
 		let typ = typeof inner;
+		let res;
 		if (typ == 'boolean') {
 			inner = BigInt(inner);
 			typ = typeof inner;
 		}
 		if (inner === undefined || inner === null) {
-			sqlite3.sqlite3_bind_null(stmt, i);
+			res = sqlite3.sqlite3_bind_null(stmt, i);
 		}
 		else if (typ == 'bigint') {
-			sqlite3.sqlite3_bind_int64(stmt, i, inner);
+			res = sqlite3.sqlite3_bind_int64(stmt, i, inner);
 		}
 		else if (typ == 'number') {
-			sqlite3.sqlite3_bind_double(stmt, i, inner);
+			res = sqlite3.sqlite3_bind_double(stmt, i, inner);
 		}
 		else if (typ == 'string') {
 			const ptr = alloc_str(inner);
-			sqlite3.sqlite3_bind_text(stmt, i, ptr, sqlite3.strlen(ptr), sqlite3.free_ptr());
+			res = sqlite3.sqlite3_bind_text(stmt, i, ptr, sqlite3.strlen(ptr), sqlite3.free_ptr());
 		}
 		else if (inner instanceof ArrayBuffer || ArrayBuffer.isView(inner)) {
 			const ptr = sqlite3.malloc(inner.byteLength);
 			if (!ptr) throw new OutOfMemError();
 			const src = new Uint8Array(inner instanceof ArrayBuffer ? inner : inner.buffer, inner.byteOffset ?? 0, inner.byteLength);
 			mem8(ptr, src.byteLength).set(src);
-			sqlite3.sqlite3_bind_blob(stmt, i, ptr, src.byteLength, sqlite3.free_ptr());
+			res = sqlite3.sqlite3_bind_blob(stmt, i, ptr, src.byteLength, sqlite3.free_ptr());
 		}
 		else {
 			throw new Error("Don't know how to bind this");
 		}
+		handle_error(res, sqlite3.sqlite3_db_handle(stmt));
+	}
+}
+export class ZeroBlob extends Value {
+	#length = 0;
+	constructor(length) {
+		this.#length = length;
+	}
+	bind(stmt, i) {
+		const res = sqlite3.sqlite3_bind_zeroblob(stmt, i, this.#length);
+		handle_error(res, sqlite3.sqlite3_db_handle(stmt));
 	}
 }
