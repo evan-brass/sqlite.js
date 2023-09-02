@@ -34,7 +34,7 @@ export class Value {
 	}
 
 	get typ() {
-		this.#sqlite_typ ??= sqlite3.sqlite3_value_type(this.#ptr);
+		this.#typ ??= sqlite3.sqlite3_value_type(this.#ptr);
 		return this.#typ;
 	}
 	get numtyp() {
@@ -67,6 +67,7 @@ export class RowValue extends Value {
 	#i;
 	#typ;
 	constructor(stmt, i) {
+		super();
 		this.#stmt = stmt;
 		this.#i = i;
 	}
@@ -102,7 +103,11 @@ export class RowValue extends Value {
 export class JsValue extends Value {
 	#inner;
 	constructor(inner) {
+		super();
 		this.#inner = inner;
+	}
+	get natural() {
+		return this.#inner;
 	}
 	[Symbol.toPrimitive](_hint) {
 		return this.#inner;
@@ -144,6 +149,7 @@ export class JsValue extends Value {
 export class ZeroBlob extends Value {
 	#length = 0;
 	constructor(length) {
+		super();
 		this.#length = length;
 	}
 	bind(stmt, i) {
