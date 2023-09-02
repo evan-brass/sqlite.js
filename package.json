@@ -1,6 +1,6 @@
 {
 	"name": "sql.mjs",
-	"version": "0.16.0",
+	"version": "0.17.0",
 	"description": "SQLite Compiled to WASM, asyncified, and then wrapped in a little JavaScript.",
 	"keywords": [
 		"sqlite",
@@ -13,8 +13,8 @@
 		"opfs",
 		"origin-private-file-system"
 	],
-	"scripts":{
-		"install": "make RELEASE=true"
+	"scripts": {
+		"build": "make RELEASE=true"
 	},
 	"files": [
 		"dist/**/*.mjs",
