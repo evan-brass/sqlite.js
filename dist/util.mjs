@@ -22,3 +22,8 @@ export class Trait {
 		return typeof target == 'object' && target !== null && target[this.symbol] !== undefined;
 	}
 }
+
+export function is_safe(int) {
+	return (BigInt(Number.MIN_SAFE_INTEGER) < int) &&
+		(int < BigInt(Number.MAX_SAFE_INTEGER));
+}

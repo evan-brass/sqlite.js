@@ -19,10 +19,6 @@ export class OpenParams {
 	}
 }
 
-function is_safe(int) {
-	return (BigInt(Number.MIN_SAFE_INTEGER) < int) &&
-		(int < BigInt(Number.MAX_SAFE_INTEGER));
-}
 class Bindings {
 	inner = [];
 	strings_from_args(strings, args) {
