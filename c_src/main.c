@@ -24,6 +24,11 @@ __attribute__((import_module("vfs"), import_name("xFileControl"))) int js_xFileC
 __attribute__((import_module("vfs"), import_name("xSectorSize"))) int js_xSectorSize(sqlite3_file*);
 __attribute__((import_module("vfs"), import_name("xDeviceCharacteristics"))) int js_xDeviceCharacteristics(sqlite3_file*);
 __attribute__((import_module("func"), import_name("xFunc"))) void js_xFunc(sqlite3_context*, int, sqlite3_value**);
+__attribute__((import_module("func"), import_name("xStep"))) void js_xStep(sqlite3_context*, int, sqlite3_value**);
+__attribute__((import_module("func"), import_name("xFinal"))) void js_xFinal(sqlite3_context*);
+__attribute__((import_module("func"), import_name("xValue"))) void js_xValue(sqlite3_context*);
+__attribute__((import_module("func"), import_name("xInverse"))) void js_xInverse(sqlite3_context*, int, sqlite3_value**);
+__attribute__((import_module("func"), import_name("xDestroy"))) void js_xDestroy(void*);
 
 static sqlite3_io_methods IoMethods = {
 	1,
@@ -80,17 +85,17 @@ __attribute__((visibility("default"))) sqlite3_vfs* allocate_vfs(const char* zNa
 	return ret;
 }
 
-__attribute__((visibility("default"))) int create_scalar_function(sqlite3* db, const char* name, int nArgs, int flags, void* pApp) {
+__attribute__((visibility("default"))) int create_scalar_function(sqlite3* db, const char* name, int nArgs, int flags) {
 	return sqlite3_create_function_v2(
 		db,
 		name,
 		nArgs,
 		SQLITE_UTF8 | flags,
-		pApp,
+		(void*)name,
 		js_xFunc,
 		NULL,
 		NULL,
-		NULL
+		js_xDestroy
 	);
 }
 

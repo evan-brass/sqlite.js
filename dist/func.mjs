@@ -1,63 +1,76 @@
-import { sqlite3, imports, memdv, mem8, handle_error, alloc_str, read_str } from "./sqlite.mjs";
-import {
-	SQLITE_INTEGER, SQLITE_FLOAT, SQLITE3_TEXT, SQLITE_BLOB, SQLITE_NULL
-} from "./sqlite_def.mjs";
+import { Conn } from "./conn.mjs";
+import { sqlite3, imports, memdv, alloc_str, handle_error } from "./sqlite.mjs";
+import { OutOfMemError, is_promise } from "./util.mjs";
+import { JsValue, Value } from "./value.mjs";
 
-export const funcs = [];
+const funcs = new Map(); // func_name_ptr -> Func
 
-export function create_scalar_func(conn, func, {flags = 0, nArgs = func.length} = {}) {
-	const name_ptr = alloc_str(func.name);
-	const res = sqlite3.create_scalar_function(
-		conn,
-		name_ptr,
-		nArgs,
-		flags,
-		funcs.length
-	);
-	handle_error(res, conn);
+Conn.prototype.create_scalarf = function create_scalarf(func, { func_name = func.name, flags = 0, n_args = func.length } = {}) {
+	const name_ptr = alloc_str(func_name);
+	if (!name_ptr) throw new OutOfMemError();
+	funcs.set(name_ptr, func);
+	const res = sqlite3.create_scalar_function(this.ptr, name_ptr, n_args, flags);
+	handle_error(res, this.ptr);
+};
 
-	funcs.push(func);
-}
-
-export function value2js(value_ptr) {
-	const type = sqlite3.sqlite3_value_type(value_ptr);
-	if (type == SQLITE_INTEGER) {
-		return sqlite3.sqlite3_value_int64(value_ptr);
-	}
-	else if (type == SQLITE_FLOAT) {
-		return sqlite3.sqlite3_value_double(value_ptr);
-	}
-	else if (type == SQLITE_BLOB) {
-		const len = sqlite3.sqlite3_value_bytes(value_ptr);
-		return mem8(sqlite3.sqlite3_value_blob(value_ptr), len);
-	}
-	else if (type == SQLITE_NULL) {
-		return null;
-	}
-	else if (type == SQLITE3_TEXT) {
-		const len = sqlite3.sqlite3_value_bytes(value_ptr);
-		return read_str(sqlite3.sqlite3_value_text(value_ptr), len);
-	}
+function get_func(ctx_ptr) {
+	const name_ptr = sqlite3.sqlite3_user_data(ctx_ptr);
+	const func = funcs.get(name_ptr);
+	if (!func) throw new Error("Unknown function?");
+	return func;
 }
 
 imports['func'] = {
-	async xFunc(ctx_ptr, num_args, args_ptr) {
-		const i = sqlite3.sqlite3_user_data(ctx_ptr);
-		const f = funcs[i];
+	xFunc(ctx_ptr, num_args, args_ptr) {
+		const func = get_func(ctx_ptr);
 		const args = [];
 		const dv = memdv();
 		for (let i = 0; i < num_args; ++i) {
 			const value_ptr = dv.getInt32(args_ptr + 4 * i, true);
-			args[i] = value2js(value_ptr);
+			args[i] = new Value(value_ptr);
 		}
-
+		function handle_e(e) {
+			if (e instanceof OutOfMemError) {
+				sqlite3.sqlite3_result_error_nomem(ctx_ptr);
+			}
+			else {
+				const msg_ptr = alloc_str(String(e));
+				sqlite3.sqlite3_result_error(ctx_ptr, msg_ptr, -1);
+			}
+		}
+		function handle_val(v) {
+			if (!(v instanceof Value)) v = new JsValue(v);
+			v.result(ctx_ptr);
+		}
 		try {
-			// TODO: Make xFunc not always async
-			const res = await f(...args);
-
-			debugger;
+			let ret = func(...args);
+			if (is_promise(ret)) {
+				return ret.then(handle_val, handle_e);
+			}
+			handle_val(ret);
 		} catch (e) {
-			// Set the error on the context
+			handle_e(e);
 		}
+	},
+	xStep(ctx_ptr, num_args, args_ptr) {
+		const func = get_func(ctx_ptr);
+		debugger;
+	},
+	xFinal(ctx_ptr) {
+		const func = get_func(ctx_ptr);
+		debugger;
+	},
+	xDestroy(func_name_ptr) {
+		funcs.delete(func_name_ptr);
+		sqlite3.free(func_name_ptr);
+		debugger;
+	},
+	xValue(ctx_ptr) {
+		const func = get_func(ctx_ptr);
+		debugger;
+	},
+	xInverse(ctx_ptr) {
+		const func = get_func(ctx_ptr);
+		debugger;
 	}
 };

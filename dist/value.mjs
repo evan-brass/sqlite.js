@@ -71,7 +71,11 @@ export class Value {
 		const res = sqlite3.sqlite3_bind_value(stmt, i, this.#ptr);
 		handle_error(res, sqlite3.sqlite3_db_handle(stmt));
 	}
+	result(ctx) {
+		sqlite3.sqlite3_result_value(ctx, this.#ptr);
+	}
 }
+// TODO: Add support for detaching row values ones we move to a new row
 export class RowValue extends Value {
 	#stmt;
 	#i;
@@ -109,6 +113,10 @@ export class RowValue extends Value {
 		const res = sqlite3.sqlite3_bind_value(stmt, i, ptr);
 		handle_error(res, sqlite3.sqlite3_db_handle(stmt));
 	}
+	result(ctx) {
+		const ptr = sqlite3.sqlite3_column_value(this.#stmt, this.#i);
+		sqlite3.sqlite3_result_value(ctx, ptr);
+	}
 }
 export class JsValue extends Value {
 	#inner;
@@ -140,10 +148,12 @@ export class JsValue extends Value {
 			res = sqlite3.sqlite3_bind_double(stmt, i, inner);
 		}
 		else if (typ == 'string') {
+			// TODO: Support internal null bytes?
 			const ptr = alloc_str(inner);
-			res = sqlite3.sqlite3_bind_text(stmt, i, ptr, sqlite3.strlen(ptr), sqlite3.free_ptr());
+			res = sqlite3.sqlite3_bind_text(stmt, i, ptr, -1, sqlite3.free_ptr());
 		}
 		else if (inner instanceof ArrayBuffer || ArrayBuffer.isView(inner)) {
+			// TODO: Check if the buffer is a slice of the WASM memory?  In that case then we shouldn't copy, just pass with SQLITE_TRANSIENT
 			const ptr = sqlite3.malloc(inner.byteLength);
 			if (!ptr) throw new OutOfMemError();
 			const src = new Uint8Array(inner instanceof ArrayBuffer ? inner : inner.buffer, inner.byteOffset ?? 0, inner.byteLength);
@@ -155,6 +165,39 @@ export class JsValue extends Value {
 		}
 		handle_error(res, sqlite3.sqlite3_db_handle(stmt));
 	}
+	result(ctx) {
+		let inner = this.#inner;
+		let typ = typeof inner;
+		if (typ == 'boolean') {
+			inner = BigInt(inner);
+			typ = typeof inner;
+		}
+		if (inner === undefined || inner === null) {
+			sqlite3.sqlite3_result_null(ctx);
+		}
+		else if (typ == 'bigint') {
+			sqlite3.sqlite3_result_int64(ctx, inner);
+		}
+		else if (typ == 'number') {
+			sqlite3.sqlite3_result_double(ctx, inner);
+		}
+		else if (typ == 'string') {
+			// TODO: Support internal null bytes?
+			const ptr = alloc_str(inner);
+			sqlite3.sqlite3_result_text(ctx, ptr, -1, sqlite3.free_ptr());
+		}
+		else if (inner instanceof ArrayBuffer || ArrayBuffer.isView(inner)) {
+			// TODO: Check if the buffer is a slice of the WASM memory?  In that case then we shouldn't copy, just pass with SQLITE_TRANSIENT
+			const ptr = sqlite3.malloc(inner.byteLength);
+			if (!ptr) throw new OutOfMemError();
+			const src = new Uint8Array(inner instanceof ArrayBuffer ? inner : inner.buffer, inner.byteOffset ?? 0, inner.byteLength);
+			mem8(ptr, src.byteLength).set(src);
+			sqlite3.sqlite3_result_blob(ctx, ptr, src.byteLength, sqlite3.free_ptr());
+		}
+		else {
+			throw new Error("Don't know how to bind this");
+		}
+	}
 }
 export class ZeroBlob extends Value {
 	#length = 0;
@@ -165,5 +208,8 @@ export class ZeroBlob extends Value {
 	bind(stmt, i) {
 		const res = sqlite3.sqlite3_bind_zeroblob(stmt, i, this.#length);
 		handle_error(res, sqlite3.sqlite3_db_handle(stmt));
+	}
+	result(ctx) {
+		sqlite3.sqlite3_result_zeroblob(ctx, this.#length);
 	}
 }
