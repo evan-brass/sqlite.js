@@ -6,7 +6,7 @@ import {
 import { File } from './file.mjs';
 import {default as opfs} from './opfs.mjs';
 
-// Instead of the picker VFS storing the file handle into
+// TODO: Complete rewrite, this is all shit.
 export const handles = new Map(); // key (string) -> FileSystemFileHandle
 
 const accept = {'application/sqlite*': ['.sqlite', '.sqlite3', '.db', '.db3']};
@@ -16,14 +16,12 @@ export class Picker {
 	max_pathname = 64;
 	flags_filter = SQLITE_OPEN_READONLY | SQLITE_OPEN_READWRITE | SQLITE_OPEN_DELETEONCLOSE;
 	async open(filename, flags) {
-		const db = await db_prom;
-
 		if (String(filename).endsWith('.tmp')) {
 			// pass temp files to the opfs filesystem:
 			return await opfs.open(...arguments);
 		}
 
-		const [command, rest] = String(filename).split(':');
+		let [command, rest] = String(filename).split(':');
 		command = command.toLocaleLowerCase();
 		let handle;
 		if (command == 'save') {
