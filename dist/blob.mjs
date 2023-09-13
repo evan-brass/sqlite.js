@@ -1,4 +1,5 @@
-import { alloc_str, handle_error, mem8, memdv, sqlite3, main_ptr } from './sqlite.mjs';
+import { handle_error, mem8, memdv, sqlite3 } from './sqlite.mjs';
+import { dyn_s, free_s, stat_s } from './strings.mjs';
 import { OutOfMemError } from './util.mjs';
 
 export class SqliteBlob {
@@ -10,19 +11,19 @@ export class SqliteBlob {
 	offset;
 	len;
 	constructor() { Object.assign(this, ...arguments); }
-	static async open(conn, table, column, rowid, writable = true, { db_name = 'main', buffer_size = 1024, offset = 0, len} = {}) {
+	static async open(conn, table, column, rowid, writable = true, { db_name = stat_s('main'), buffer_size = 1024, offset = 0, len} = {}) {
 		const buffer_ptr = sqlite3.malloc(buffer_size);
 		const blob_ptr = sqlite3.malloc(4);
-		const name_ptr = (db_name == 'main') ? main_ptr : alloc_str(db_name);
-		const table_ptr = alloc_str(table);
-		const column_ptr = alloc_str(column);
+		db_name = dyn_s(db_name);
+		table = dyn_s(table);
+		column = dyn_s(column);
 
 		let blob = 0;
 		try {
-			if (!buffer_ptr || !blob_ptr || !name_ptr || !table_ptr || !column_ptr) throw new OutOfMemError();
+			if (!buffer_ptr || !blob_ptr || !db_name || !table || !column) throw new OutOfMemError();
 			memdv().setInt32(blob_ptr, 0, true); // Not sure if this is neccessary
 
-			const res = await sqlite3.sqlite3_blob_open(conn.ptr, name_ptr, table_ptr, column_ptr, BigInt(rowid), Number(writable), blob_ptr);
+			const res = await sqlite3.sqlite3_blob_open(conn.ptr, db_name, table, column, BigInt(rowid), Number(writable), blob_ptr);
 			blob = memdv().getInt32(blob_ptr, true);
 			handle_error(res, conn.ptr);
 
@@ -35,9 +36,9 @@ export class SqliteBlob {
 			throw e;
 		} finally {
 			sqlite3.free(blob_ptr);
-			if (name_ptr != main_ptr) sqlite3.free(name_ptr);
-			sqlite3.free(table_ptr);
-			sqlite3.free(column_ptr);
+			free_s(db_name);
+			free_s(table);
+			free_s(column);
 		}
 	}
 	async close() {

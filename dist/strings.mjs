@@ -1,11 +1,10 @@
 import { sqlite3, mem8 } from "./sqlite.mjs";
-import { OutOfMemError } from "./util.mjs";
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+// const decoder = new TextDecoder();
 
 // A string stored in WASM memory
-class Str {
+export class Str {
 	#ptr;
 	#inner;
 	#len;
@@ -21,6 +20,7 @@ class Str {
 		const terminated = str.endsWith('\0') ? str : str + '\0';
 		
 		const encoded = encoder.encode(terminated);
+		if (!sqlite3) return;
 		const ptr = sqlite3.malloc(encoded.byteLength);
 		if (!ptr) return;
 		mem8(ptr, encoded.byteLength).set(encoded);
@@ -51,13 +51,13 @@ export function stat_s(str) {
 	let ret = statics.get(str);
 	if (!ret) {
 		ret = Str.alloc(str);
-		statics.set(str, ret);
+		if (ret) statics.set(str, ret);
 	}
 	return ret;
 }
 
 // Dynamic strings are deallocated when they stop being used:
-const registry = new FinalizationRegistry(sqlite3.free);
+const registry = new FinalizationRegistry(ptr => sqlite3.free(ptr));
 export function dyn_s(str, { unique = false} = {}) {
 	if (str instanceof Str) return str;
 	if (!unique) {
@@ -65,7 +65,7 @@ export function dyn_s(str, { unique = false} = {}) {
 		if (stat) return stat;
 	}
 	const ret = Str.alloc(str);
-	registry.register(ret, ret.ptr, ret);
+	if (ret) registry.register(ret, ret.ptr, ret);
 	return ret;
 }
 

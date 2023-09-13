@@ -8,21 +8,22 @@
 import './basics.mjs';
 import { OutOfMemError } from "../util.mjs";
 import {
-	sqlite3, imports, alloc_str, read_str, mem8, memdv, encoder, handle_error,
+	sqlite3, imports, read_str, mem8, memdv, encoder, handle_error,
 	vfs_impls, file_impls
 } from "../sqlite.mjs";
 import {
 	SQLITE_OK,
 	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READONLY, SQLITE_OPEN_READWRITE
 } from "../sqlite_def.mjs";
+import { dyn_s } from '../strings.mjs';
 
 // SQLite calls .close on files, even if they fail to open... but we don't get a file_impl unless the open succeeds, so FakeFile just stops that from being an error.
 class FakeFile { close() { /* No Op */ } }
 
 export function register_vfs(vfs, make_default = false) {
-	const name_ptr = alloc_str(vfs.name);
-	if (!name_ptr) throw new OutOfMemError();
-	const vfs_ptr = sqlite3.allocate_vfs(name_ptr, vfs.max_pathname);
+	const name = dyn_s(vfs.name);
+	if (!name) throw new OutOfMemError();
+	const vfs_ptr = sqlite3.allocate_vfs(name, vfs.max_pathname);
 	if (!vfs_ptr) throw new OutOfMemError();
 	vfs_impls.set(vfs_ptr, { vfs, errors: []});
 
@@ -43,25 +44,25 @@ class Filename {
 		return read_str(this.#ptr);
 	}
 	get_parameter(param, def_val) {
-		const param_ptr = alloc_str(param);
-		if (!param_ptr) throw new OutOfMemError();
+		param = dyn_s(param);
+		if (!param) throw new OutOfMemError();
 		try {
 			if (typeof def_val == 'boolean') {
-				const res = sqlite3.sqlite3_uri_boolean(this.#ptr, param_ptr, Number(def_val));
+				const res = sqlite3.sqlite3_uri_boolean(this.#ptr, param, Number(def_val));
 				return Boolean(res);
 			}
 			else if (typeof def_val == 'number') {
-				return Number(sqlite3.sqlite3_uri_int64(this.#ptr, param_ptr, BigInt(def_val)));
+				return Number(sqlite3.sqlite3_uri_int64(this.#ptr, param, BigInt(def_val)));
 			}
 			else if (typeof def_val == 'bigint') {
-				return sqlite3.sqlite3_uri_int64(this.#ptr, param_ptr, def_val);
+				return sqlite3.sqlite3_uri_int64(this.#ptr, param, def_val);
 			}
 			else {
-				const res = sqlite3.sqlite3_uri_parameter(this.#ptr, param_ptr);
+				const res = sqlite3.sqlite3_uri_parameter(this.#ptr, param);
 				return res ? read_str(res) : def_val;
 			}
 		} finally {
-			sqlite3.free(param_ptr);
+			sqlite3.free(param);
 		}
 	}
 	*[Symbol.iterator]() {

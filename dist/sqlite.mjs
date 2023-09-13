@@ -3,7 +3,7 @@ import {
 	SQLITE_OK,
 	SQLITE_ROW, SQLITE_DONE
 } from './sqlite_def.mjs';
-import { OutOfMemError } from './util.mjs';
+import { stat_s } from './strings.mjs';
 
 export const encoder = new TextEncoder();
 export const decoder = new TextDecoder();
@@ -11,8 +11,6 @@ export const decoder = new TextDecoder();
 
 export const vfs_impls = new Map(); // ptr -> { vfs, errors }
 export const file_impls = new Map(); // ptr -> { file, errors }
-
-export let main_ptr;
 
 /**
  * Asyncify will automatically stub out all the imports, so we don't have to provide all the imports during wasm instantiation.
@@ -34,8 +32,7 @@ export default asyncify(fetch(new URL('sqlite3.async.wasm', import.meta.url)), i
 	sqlite3 = exports;
 	sqlite3._start(); // Call the main function
 
-	main_ptr = alloc_str('main');
-	if (!main_ptr) throw new OutOfMemError();
+	stat_s('main');
 
 	return sqlite3;
 });
@@ -57,16 +54,6 @@ export function mem8(offset, length) {
 }
 export function memdv(offset, length) {
 	return new DataView(sqlite3.memory.buffer, offset, length);
-}
-export function alloc_str(s) {
-	if (!s.endsWith('\0')) {
-		s += '\0';
-	}
-	const encoded = encoder.encode(s);
-	const ptr = sqlite3.malloc(encoded.byteLength);
-	if (!ptr) return;
-	mem8(ptr, encoded.byteLength).set(encoded);
-	return ptr;
 }
 export function read_str(ptr, len) {
 	if (!len) len = sqlite3.strlen(ptr);

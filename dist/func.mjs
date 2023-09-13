@@ -1,15 +1,16 @@
 import { Conn } from "./conn.mjs";
-import { sqlite3, imports, memdv, alloc_str, handle_error } from "./sqlite.mjs";
+import { sqlite3, imports, memdv, handle_error } from "./sqlite.mjs";
+import { dyn_s, free_s } from "./strings.mjs";
 import { OutOfMemError, is_promise } from "./util.mjs";
 import { JsValue, Value } from "./value.mjs";
 
 const funcs = new Map(); // func_name_ptr -> Func
 
 Conn.prototype.create_scalarf = function create_scalarf(func, { func_name = func.name, flags = 0, n_args = func.length } = {}) {
-	const name_ptr = alloc_str(func_name);
-	if (!name_ptr) throw new OutOfMemError();
-	funcs.set(name_ptr, func);
-	const res = sqlite3.create_scalar_function(this.ptr, name_ptr, n_args, flags);
+	const name = dyn_s(func_name, { unique: true });
+	if (!name) throw new OutOfMemError();
+	funcs.set(name.ptr, func);
+	const res = sqlite3.create_scalar_function(this.ptr, name, n_args, flags);
 	handle_error(res, this.ptr);
 };
 
@@ -34,8 +35,9 @@ imports['func'] = {
 				sqlite3.sqlite3_result_error_nomem(ctx_ptr);
 			}
 			else {
-				const msg_ptr = alloc_str(String(e));
-				sqlite3.sqlite3_result_error(ctx_ptr, msg_ptr, -1);
+				const msg = dyn_s(String(e));
+				sqlite3.sqlite3_result_error(ctx_ptr, msg, -1);
+				free_s(msg);
 			}
 		}
 		function handle_val(v) {

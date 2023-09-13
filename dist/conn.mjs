@@ -1,18 +1,19 @@
 import { OutOfMemError, Trait } from './util.mjs';
-import { default as sqlite_initialized, main_ptr, sqlite3, mem8, memdv, read_str, alloc_str, encoder, decoder, handle_error, vfs_impls, file_impls } from './sqlite.mjs';
+import { default as sqlite_initialized, sqlite3, memdv, read_str, handle_error, vfs_impls, file_impls } from './sqlite.mjs';
 import {
 	SQLITE_ROW, SQLITE_DONE,
 	SQLITE_OPEN_URI, SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
 	SQLITE_FCNTL_VFS_POINTER, SQLITE_FCNTL_FILE_POINTER,
 } from "./sqlite_def.mjs";
 import { JsValue, RowValue, Value } from './value.mjs';
+import { dyn_s, free_s, stat_s } from './strings.mjs';
 
 export const SqlCommand = new Trait("This trait marks special commands which can be used inside template literals tagged with the Conn.sql tag.");
 
 export class OpenParams {
-	pathname = ":memory:";
+	pathname = stat_s(":memory:");
 	flags = SQLITE_OPEN_URI | SQLITE_OPEN_CREATE | SQLITE_OPEN_EXRESCODE | SQLITE_OPEN_READWRITE
-	vfs = "";
+	vfs = stat_s("");
 	constructor() { Object.assign(this, ...arguments); }
 	async [SqlCommand](conn) {
 		await conn.open(this);
@@ -110,28 +111,28 @@ export class Conn {
 	async open(params = new OpenParams()) {
 		await sqlite_initialized;
 
-		let pathname_ptr, conn_ptr;
+		let pathname, conn_ptr;
 		let conn = 0;
-		let vfs_ptr = 0;
+		let vfs = 0;
 		try {
-			pathname_ptr = alloc_str(params.pathname);
+			pathname = dyn_s(params.pathname);
 			conn_ptr = sqlite3.malloc(4);
 			if (params.vfs) {
-				vfs_ptr = alloc_str(params.vfs);
-				if (!vfs_ptr) throw new OutOfMemError();
+				vfs = dyn_s(params.vfs);
+				if (!vfs) throw new OutOfMemError();
 			}
-			if (!pathname_ptr || !conn_ptr) throw new OutOfMemError();
+			if (!pathname || !conn_ptr) throw new OutOfMemError();
 
-			let res = await sqlite3.sqlite3_open_v2(pathname_ptr, conn_ptr, params.flags, vfs_ptr);
+			let res = await sqlite3.sqlite3_open_v2(pathname, conn_ptr, params.flags, vfs);
 			conn = memdv().getInt32(conn_ptr, true);
 			handle_error(res, conn);
 		} catch(e) {
 			sqlite3.sqlite3_close_v2(conn);
 			throw e;
 		} finally {
-			sqlite3.free(pathname_ptr);
+			free_s(pathname);
+			free_s(vfs);
 			sqlite3.free(conn_ptr);
-			sqlite3.free(vfs_ptr);
 		}
 
 		if (this.ptr) {
@@ -139,7 +140,7 @@ export class Conn {
 		}
 		this.ptr = conn;
 	}
-	async *backup(dest, { src_db = 'main', dest_db = 'main', pages_per = 5 } = {}) {
+	async *backup(dest, { src_db = stat_s('main'), dest_db = stat_s('main'), pages_per = 5 } = {}) {
 		let dconn;
 		if (dest instanceof OpenParams) {
 			dconn = new Conn();
@@ -148,8 +149,8 @@ export class Conn {
 			dconn = dest;
 		} else { throw new Error(); }
 
-		const src_name = (src_db == 'main') ? main_ptr : alloc_str(src_db);
-		const dest_name = (dest_db == 'main') ? main_ptr : alloc_str(dest_db);
+		const src_name = dyn_s(src_db);
+		const dest_name = dyn_s(dest_db);
 		let backup;
 		try {
 			if (!src_name || !dest_name) throw new OutOfMemError();
@@ -168,8 +169,8 @@ export class Conn {
 			}
 		} finally {
 			sqlite3.sqlite3_backup_finish(backup);
-			if (src_name != main_ptr) sqlite3.free(src_name);
-			if (dest_name != main_ptr) sqlite3.free(dest_name);
+			free_s(src_name);
+			free_s(dest_name);
 			if (dconn != dest) dconn.close();
 		}
 	}
@@ -179,48 +180,48 @@ export class Conn {
 		sqlite3.sqlite3_close_v2(old);
 	}
 	// Meta
-	filename(db_name = 'main') {
+	filename(db_name = stat_s('main')) {
 		if (!this.ptr) return;
-		const name_ptr = (db_name == 'main') ? main_ptr : alloc_str(db_name);
+		const name = dyn_s(db_name);
 		try {
-			if (!name_ptr) throw new OutOfMemError();
-			const filename_ptr = sqlite3.sqlite3_db_filename(this.ptr, name_ptr);
+			if (!name) throw new OutOfMemError();
+			const filename_ptr = sqlite3.sqlite3_db_filename(this.ptr, name);
 			return read_str(filename_ptr) || ':memory:';
 		} finally {
-			if (name_ptr != main_ptr) sqlite3.free(name_ptr);
+			free_s(name);
 		}
 	}
-	vfs(db_name = 'main') {
+	vfs(db_name = stat_s('main')) {
 		if (!this.ptr) return;
 
-		const name_ptr = (db_name == 'main') ? main_ptr : alloc_str(db_name);
+		const name = dyn_s(db_name);
 		const vfs_ptr_ptr = sqlite3.malloc(4);
 		try {
-			if (!vfs_ptr_ptr || !name_ptr) throw new OutOfMemError();
-			const res = sqlite3.sqlite3_file_control(this.ptr, name_ptr, SQLITE_FCNTL_VFS_POINTER, vfs_ptr_ptr);
+			if (!vfs_ptr_ptr || !name) throw new OutOfMemError();
+			const res = sqlite3.sqlite3_file_control(this.ptr, name, SQLITE_FCNTL_VFS_POINTER, vfs_ptr_ptr);
 			handle_error(res);
 			const vfs_ptr = memdv().getInt32(vfs_ptr_ptr, true);
 			const vfs = vfs_impls.get(vfs_ptr)?.vfs;
 			return vfs;
 		} finally {
-			if (name_ptr != main_ptr) sqlite3.free(name_ptr);
+			free_s(name);
 			sqlite3.free(vfs_ptr_ptr);
 		}
 	}
-	file(db_name = 'main') {
+	file(db_name = stat_s('main')) {
 		if (!this.ptr) return;
 
-		const name_ptr = (db_name == 'main') ? main_ptr : alloc_str(db_name);
+		const name = dyn_s(db_name);
 		const file_ptr_ptr = sqlite3.malloc(4);
 		try {
-			if (!file_ptr_ptr || !name_ptr) throw new OutOfMemError();
-			const res = sqlite3.sqlite3_file_control(this.ptr, name_ptr, SQLITE_FCNTL_FILE_POINTER, file_ptr_ptr);
+			if (!file_ptr_ptr || !name) throw new OutOfMemError();
+			const res = sqlite3.sqlite3_file_control(this.ptr, name, SQLITE_FCNTL_FILE_POINTER, file_ptr_ptr);
 			handle_error(res);
 			const file_ptr = memdv().getInt32(file_ptr_ptr, true);
 			const file = file_impls.get(file_ptr)?.file;
 			return file;
 		} finally {
-			if (name_ptr != main_ptr) sqlite3.free(name_ptr);
+			free_s(name);
 			sqlite3.free(file_ptr_ptr);
 		}
 	}
@@ -243,14 +244,13 @@ export class Conn {
 		
 		await sqlite_initialized;
 
-		const sql_ptr = alloc_str(sql);
-		const sql_len = sqlite3.strlen(sql_ptr);
+		sql = dyn_s(sql);
 		const sql_end_ptr = sqlite3.malloc(4);
 		const stmt_ptr = sqlite3.malloc(4);
 		try {
-			if (!sql_ptr || !sql_end_ptr || !stmt_ptr) throw new OutOfMemError();
-			memdv().setInt32(sql_end_ptr, sql_ptr, true);
-			const sql_end = sql_ptr + sql_len;
+			if (!sql || !sql_end_ptr || !stmt_ptr) throw new OutOfMemError();
+			memdv().setInt32(sql_end_ptr, sql, true);
+			const sql_end = sql.ptr + sql.len;
 	
 			while (1) {
 				const sql_ptr = memdv().getInt32(sql_end_ptr, true);
@@ -272,7 +272,7 @@ export class Conn {
 				}
 			}
 		} finally {
-			sqlite3.free(sql_ptr);
+			free_s(sql);
 			sqlite3.free(sql_end_ptr);
 			sqlite3.free(stmt_ptr);
 		}

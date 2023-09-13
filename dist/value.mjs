@@ -1,6 +1,7 @@
-import { alloc_str, handle_error, mem8, read_str, sqlite3 } from "./sqlite.mjs";
+import { handle_error, mem8, read_str, sqlite3 } from "./sqlite.mjs";
 import { SQLITE3_TEXT, SQLITE_BLOB, SQLITE_FLOAT, SQLITE_INTEGER, SQLITE_NULL } from "./sqlite_def.mjs";
 import { is_safe } from "./util.mjs";
+import { Str } from './strings.mjs';
 
 export class Value {
 	#ptr;
@@ -148,9 +149,8 @@ export class JsValue extends Value {
 			res = sqlite3.sqlite3_bind_double(stmt, i, inner);
 		}
 		else if (typ == 'string') {
-			// TODO: Support internal null bytes?
-			const ptr = alloc_str(inner);
-			res = sqlite3.sqlite3_bind_text(stmt, i, ptr, -1, sqlite3.free_ptr());
+			const str = Str.alloc(inner);
+			res = sqlite3.sqlite3_bind_text(stmt, i, str, str.len, sqlite3.free_ptr());
 		}
 		else if (inner instanceof ArrayBuffer || ArrayBuffer.isView(inner)) {
 			// TODO: Check if the buffer is a slice of the WASM memory?  In that case then we shouldn't copy, just pass with SQLITE_TRANSIENT
@@ -182,9 +182,8 @@ export class JsValue extends Value {
 			sqlite3.sqlite3_result_double(ctx, inner);
 		}
 		else if (typ == 'string') {
-			// TODO: Support internal null bytes?
-			const ptr = alloc_str(inner);
-			sqlite3.sqlite3_result_text(ctx, ptr, -1, sqlite3.free_ptr());
+			const str = Str.alloc(inner);
+			sqlite3.sqlite3_result_text(ctx, str, str.len, sqlite3.free_ptr());
 		}
 		else if (inner instanceof ArrayBuffer || ArrayBuffer.isView(inner)) {
 			// TODO: Check if the buffer is a slice of the WASM memory?  In that case then we shouldn't copy, just pass with SQLITE_TRANSIENT

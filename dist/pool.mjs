@@ -1,14 +1,6 @@
 import { Conn, OpenParams } from './conn.mjs';
-import sqlite_initialized, { sqlite3, alloc_str, handle_error } from './sqlite.mjs';
-import { OutOfMemError } from './util.mjs';
-
-// If a connection isn't in autocommit mode, then we use this to rollback the connection to a base state.
-const rollback_ptr = (async () => {
-	await sqlite_initialized;
-	const ret = alloc_str('ROLLBACK');
-	if (ret === 0) throw new OutOfMemError();
-	return ret;
-})();
+import { sqlite3, handle_error } from './sqlite.mjs';
+import { stat_s } from './strings.mjs';
 
 export class ConnPool {
 	#conn_count = 0;
@@ -29,8 +21,8 @@ export class ConnPool {
 	}
 	async return_conn(conn) {
 		if (!conn.autocommit) {
-			const sql_ptr = await rollback_ptr;
-			const res = await sqlite3.sqlite3_exec(conn.ptr, sql_ptr, 0, 0, 0);
+			const rollback = stat_s('ROLLBACK;');
+			const res = await sqlite3.sqlite3_exec(conn.ptr, rollback, 0, 0, 0);
 			handle_error(res);
 		}
 		if (this.#waiters.length) {
