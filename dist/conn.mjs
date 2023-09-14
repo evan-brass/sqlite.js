@@ -5,7 +5,7 @@ import {
 	SQLITE_OPEN_URI, SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
 	SQLITE_FCNTL_VFS_POINTER, SQLITE_FCNTL_FILE_POINTER,
 } from "./sqlite_def.mjs";
-import { JsValue, RowValue, Value } from './value.mjs';
+import { Bindable, value_to_js } from './value.mjs';
 import { dyn_s, free_s, stat_s } from './strings.mjs';
 
 export const SqlCommand = new Trait("This trait marks special commands which can be used inside template literals tagged with the Conn.sql tag.");
@@ -69,38 +69,7 @@ class Bindings {
 				named ??= this.next_named();
 				arg = named[key]
 			}
-			let value;
-			if (arg instanceof Value) {
-				value = arg;
-			} else {
-				value = new JsValue(arg);
-			}
-			value.bind(stmt, i);
-		}
-	}
-}
-
-class Row {
-	#key_names = [];
-	constructor(stmt) {
-		const data_count = sqlite3.sqlite3_data_count(stmt);
-
-		for (let i = 0; i < data_count; ++i) {
-			const column_name = read_str(sqlite3.sqlite3_column_name(stmt, i));
-			let key = column_name;
-			for (let key_i = 2; key in this; ++key_i) {
-				key = column_name + String(key_i);
-			}
-			this[key] = new RowValue(stmt, i);
-			this.#key_names.push(key);
-		}
-	}
-	get key_names() {
-		return this.#key_names;
-	}
-	*[Symbol.iterator]() {
-		for (const key of this.#key_names) {
-			yield this[key];
+			Bindable.bind(stmt, i, arg);
 		}
 	}
 }
@@ -287,6 +256,7 @@ export class Conn {
 		}
 		for await (const stmt of this.stmts(concat)) {
 			bindings.bind(stmt);
+			let row_class;
 			while (1) {
 				const res = await sqlite3.sqlite3_step(stmt);
 				handle_error(res, this.ptr);
@@ -294,7 +264,25 @@ export class Conn {
 				if (res == SQLITE_DONE) break;
 				if (res != SQLITE_ROW) throw new Error("wat?");
 
-				yield new Row(stmt);
+				const data_count = sqlite3.sqlite3_data_count(stmt);
+
+				// Create a row class with getters for the column names if we haven't done that yet for this stmt:
+				if (!row_class) {
+					row_class = class Row extends Array {};
+					for (let i = 0; i < data_count; ++i) {
+						const column_name = read_str(sqlite3.sqlite3_column_name(stmt, i));
+						Object.defineProperty(row_class.prototype, column_name, { get() { return this[i]; } });
+					}
+				}
+
+				// Fill in the row's values:
+				const row = new row_class();
+				for (let i = 0; i < data_count; ++i) {
+					const value_ptr = sqlite3.sqlite3_column_value(stmt, i);
+					row[i] = value_to_js(value_ptr);
+				}
+
+				yield row;
 			}
 
 			let command = bindings.command();

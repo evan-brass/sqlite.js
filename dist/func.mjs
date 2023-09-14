@@ -2,7 +2,7 @@ import { Conn } from "./conn.mjs";
 import { sqlite3, imports, memdv, handle_error } from "./sqlite.mjs";
 import { dyn_s, free_s } from "./strings.mjs";
 import { OutOfMemError, is_promise } from "./util.mjs";
-import { JsValue, Value } from "./value.mjs";
+import { Resultable, value_to_js } from "./value.mjs";
 
 const funcs = new Map(); // func_name_ptr -> Func
 
@@ -28,30 +28,17 @@ imports['func'] = {
 		const dv = memdv();
 		for (let i = 0; i < num_args; ++i) {
 			const value_ptr = dv.getInt32(args_ptr + 4 * i, true);
-			args[i] = new Value(value_ptr);
+			args[i] = value_to_js(value_ptr);
 		}
-		function handle_e(e) {
-			if (e instanceof OutOfMemError) {
-				sqlite3.sqlite3_result_error_nomem(ctx_ptr);
-			}
-			else {
-				const msg = dyn_s(String(e));
-				sqlite3.sqlite3_result_error(ctx_ptr, msg, -1);
-				free_s(msg);
-			}
-		}
-		function handle_val(v) {
-			if (!(v instanceof Value)) v = new JsValue(v);
-			v.result(ctx_ptr);
-		}
+		const handle = v => Resultable.result(ctx_ptr, v);
 		try {
 			let ret = func(...args);
 			if (is_promise(ret)) {
-				return ret.then(handle_val, handle_e);
+				return ret.then(handle, handle);
 			}
-			handle_val(ret);
+			handle(ret);
 		} catch (e) {
-			handle_e(e);
+			handle(e);
 		}
 	},
 	xStep(ctx_ptr, num_args, args_ptr) {

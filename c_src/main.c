@@ -29,6 +29,11 @@ __attribute__((import_module("func"), import_name("xFinal"))) void js_xFinal(sql
 __attribute__((import_module("func"), import_name("xValue"))) void js_xValue(sqlite3_context*);
 __attribute__((import_module("func"), import_name("xInverse"))) void js_xInverse(sqlite3_context*, int, sqlite3_value**);
 __attribute__((import_module("func"), import_name("xDestroy"))) void js_xDestroy(void*);
+__attribute__((import_module("value"), import_name("release"))) void js_release(void*);
+
+__attribute__((visibility("default"))) void* release_ptr() {
+	return &js_release;
+}
 
 static sqlite3_io_methods IoMethods = {
 	1,
