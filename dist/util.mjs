@@ -19,7 +19,7 @@ export class Trait {
 		return `Trait(${this.symbol.description})`;
 	}
 	[Symbol.hasInstance](target) {
-		return typeof target == 'object' && target !== null && target[this.symbol] !== undefined;
+		return target?.[this] !== undefined;
 	}
 }
 
