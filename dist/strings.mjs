@@ -3,6 +3,12 @@ import { sqlite3, mem8 } from "./sqlite.mjs";
 const encoder = new TextEncoder();
 // const decoder = new TextDecoder();
 
+/**
+ * What I actually want here is reference counting.
+ * I'll need to be able to decrement the reference count from javascript (via finalization registry / free_s)
+ * and also through c (via a release str imported function)
+ */
+
 // A string stored in WASM memory
 export class Str {
 	#ptr;
