@@ -160,6 +160,7 @@ export class Conn {
 			free_s(name);
 		}
 	}
+	// TODO: Move vfs and file into vfs/custom.mjs
 	vfs(db_name = stat_s('main')) {
 		if (!this.ptr) return;
 
