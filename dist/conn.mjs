@@ -1,9 +1,9 @@
 import { OutOfMemError, Trait } from './util.mjs';
-import { default as sqlite_initialized, sqlite3, memdv, read_str, handle_error, vfs_impls, file_impls } from './sqlite.mjs';
+import { default as sqlite_initialized, sqlite3, memdv, read_str, handle_error } from './sqlite.mjs';
 import {
 	SQLITE_ROW, SQLITE_DONE,
 	SQLITE_OPEN_URI, SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
-	SQLITE_FCNTL_VFS_POINTER, SQLITE_FCNTL_FILE_POINTER,
+
 } from "./sqlite_def.mjs";
 import { Bindable, value_to_js } from './value.mjs';
 import { dyn_s, free_s, stat_s } from './strings.mjs';
@@ -158,41 +158,6 @@ export class Conn {
 			return read_str(filename_ptr) || ':memory:';
 		} finally {
 			free_s(name);
-		}
-	}
-	// TODO: Move vfs and file into vfs/custom.mjs
-	vfs(db_name = stat_s('main')) {
-		if (!this.ptr) return;
-
-		const name = dyn_s(db_name);
-		const vfs_ptr_ptr = sqlite3.malloc(4);
-		try {
-			if (!vfs_ptr_ptr || !name) throw new OutOfMemError();
-			const res = sqlite3.sqlite3_file_control(this.ptr, name, SQLITE_FCNTL_VFS_POINTER, vfs_ptr_ptr);
-			handle_error(res);
-			const vfs_ptr = memdv().getInt32(vfs_ptr_ptr, true);
-			const vfs = vfs_impls.get(vfs_ptr)?.vfs;
-			return vfs;
-		} finally {
-			free_s(name);
-			sqlite3.free(vfs_ptr_ptr);
-		}
-	}
-	file(db_name = stat_s('main')) {
-		if (!this.ptr) return;
-
-		const name = dyn_s(db_name);
-		const file_ptr_ptr = sqlite3.malloc(4);
-		try {
-			if (!file_ptr_ptr || !name) throw new OutOfMemError();
-			const res = sqlite3.sqlite3_file_control(this.ptr, name, SQLITE_FCNTL_FILE_POINTER, file_ptr_ptr);
-			handle_error(res);
-			const file_ptr = memdv().getInt32(file_ptr_ptr, true);
-			const file = file_impls.get(file_ptr)?.file;
-			return file;
-		} finally {
-			free_s(name);
-			sqlite3.free(file_ptr_ptr);
 		}
 	}
 	get interrupted() {

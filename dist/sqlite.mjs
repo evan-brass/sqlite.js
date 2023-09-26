@@ -8,10 +8,6 @@ import { stat_s } from './strings.mjs';
 export const encoder = new TextEncoder();
 export const decoder = new TextDecoder();
 
-// TODO: Move vfs_impls, and file_impls into vfs/custom.mjs
-export const vfs_impls = new Map(); // ptr -> { vfs, errors }
-export const file_impls = new Map(); // ptr -> { file, errors }
-
 /**
  * Asyncify will automatically stub out all the imports, so we don't have to provide all the imports during wasm instantiation.
  * What's nice about this is that it lets us add import implementations later from other modules / extensions.  If you only need

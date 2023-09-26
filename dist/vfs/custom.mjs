@@ -9,13 +9,55 @@ import './basics.mjs';
 import { OutOfMemError } from "../util.mjs";
 import {
 	sqlite3, imports, read_str, mem8, memdv, encoder, handle_error,
-	vfs_impls, file_impls
 } from "../sqlite.mjs";
 import {
 	SQLITE_OK,
-	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READONLY, SQLITE_OPEN_READWRITE
+	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READONLY, SQLITE_OPEN_READWRITE,
+	SQLITE_FCNTL_VFS_POINTER, SQLITE_FCNTL_FILE_POINTER,
 } from "../sqlite_def.mjs";
 import { dyn_s } from '../strings.mjs';
+import { Conn } from "../conn.mjs";
+
+const vfs_impls = new Map(); // ptr -> { vfs, errors }
+const file_impls = new Map(); // ptr -> { file, errors }
+
+// Expose access to the file / vfs on the connection
+Object.assign(Conn.prototype, {
+	vfs(db_name = stat_s('main')) {
+		if (!this.ptr) return;
+
+		const name = dyn_s(db_name);
+		const vfs_ptr_ptr = sqlite3.malloc(4);
+		try {
+			if (!vfs_ptr_ptr || !name) throw new OutOfMemError();
+			const res = sqlite3.sqlite3_file_control(this.ptr, name, SQLITE_FCNTL_VFS_POINTER, vfs_ptr_ptr);
+			handle_error(res);
+			const vfs_ptr = memdv().getInt32(vfs_ptr_ptr, true);
+			const vfs = vfs_impls.get(vfs_ptr)?.vfs;
+			return vfs;
+		} finally {
+			free_s(name);
+			sqlite3.free(vfs_ptr_ptr);
+		}
+	},
+	file(db_name = stat_s('main')) {
+		if (!this.ptr) return;
+
+		const name = dyn_s(db_name);
+		const file_ptr_ptr = sqlite3.malloc(4);
+		try {
+			if (!file_ptr_ptr || !name) throw new OutOfMemError();
+			const res = sqlite3.sqlite3_file_control(this.ptr, name, SQLITE_FCNTL_FILE_POINTER, file_ptr_ptr);
+			handle_error(res);
+			const file_ptr = memdv().getInt32(file_ptr_ptr, true);
+			const file = file_impls.get(file_ptr)?.file;
+			return file;
+		} finally {
+			free_s(name);
+			sqlite3.free(file_ptr_ptr);
+		}
+	}
+});
 
 // SQLite calls .close on files, even if they fail to open... but we don't get a file_impl unless the open succeeds, so FakeFile just stops that from being an error.
 class FakeFile { close() { /* No Op */ } }
