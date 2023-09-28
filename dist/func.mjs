@@ -21,25 +21,46 @@ function get_func(ctx_ptr) {
 	return func;
 }
 
-imports['func'] = {
-	xFunc(ctx_ptr, num_args, args_ptr) {
-		const func = get_func(ctx_ptr);
-		const args = [];
-		const dv = memdv();
-		for (let i = 0; i < num_args; ++i) {
-			const value_ptr = dv.getInt32(args_ptr + 4 * i, true);
-			args[i] = value_to_js(value_ptr);
+class FuncCtx {
+	ctx_ptr;
+	num_args;
+	args_ptr;
+	constructor() { Object.assign(this, ...arguments); }
+	get db() {
+		return sqlite3.sqlite3_context_db_handle(this.ctx_ptr);
+	}
+	value_ptr(i) {
+		if (i >= this.num_args) return;
+		return memdv().getInt32(this.args_ptr + 4 * i, true);
+	}
+	*args() {
+		for (let i = 0; i < this.num_args; ++i) {
+			const vp = this.value_ptr(i);
+			yield value_to_js(vp);
 		}
-		const handle = v => Resultable.result(ctx_ptr, v);
+	}
+	get func() {
+		const name_ptr = sqlite3.sqlite3_user_data(this.ctx_ptr);
+		const ret = funcs.get(name_ptr);
+		if (!ret) throw new Error("Unknown function?");
+		return ret;
+	}
+	call() {
+		const handle = v => Resultable.result(this.ctx_ptr, v);
 		try {
-			let ret = func(...args);
-			if (is_promise(ret)) {
-				return ret.then(handle, handle);
-			}
+			const ret = this.func.call(this, ...this.args());
+			if (is_promise(ret)) return ret.then(handle, handle);
 			handle(ret);
 		} catch (e) {
 			handle(e);
 		}
+	}
+}
+
+imports['func'] = {
+	xFunc(ctx_ptr, num_args, args_ptr) {
+		const ctx = new FuncCtx({ ctx_ptr, num_args, args_ptr });
+		return ctx.call();
 	},
 	xStep(ctx_ptr, num_args, args_ptr) {
 		const func = get_func(ctx_ptr);
