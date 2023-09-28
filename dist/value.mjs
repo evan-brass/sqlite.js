@@ -42,14 +42,14 @@ Object.assign(BigInt.prototype, {
 Object.assign(Number.prototype, {
 	[Bindable](stmt, i) {
 		if (Number.isInteger(this)) {
-			sqlite3.sqlite3_bind_int64(stmt, i, this);
+			sqlite3.sqlite3_bind_int64(stmt, i, BigInt(this));
 		} else {
 			sqlite3.sqlite3_bind_double(stmt, i, this);
 		}
 	},
 	[Resultable](ctx) {
 		if (Number.isInteger(this)) {
-			sqlite3.sqlite3_result_int64(ctx, this);
+			sqlite3.sqlite3_result_int64(ctx, BigInt(this));
 		} else {
 			sqlite3.sqlite3_result_double(ctx, this);
 		}
