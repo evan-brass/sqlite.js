@@ -20,6 +20,10 @@ export class OpenParams {
 	}
 }
 
+function is_anon_arg(val) {
+	return (['object', 'function'].indexOf(typeof val) == -1) || val === null || val instanceof Bindable;
+}
+
 class Bindings {
 	inner = [];
 	strings_from_args(strings, args) {
@@ -27,7 +31,7 @@ class Bindings {
 		for (let i = 0; i < args.length; ++i) {
 			const arg = args[i];
 			this.inner.push(arg);
-			if ((typeof arg != 'object' && typeof arg != 'function') || arg === null || arg instanceof ArrayBuffer || ArrayBuffer.isView(arg)) {
+			if (is_anon_arg(arg)) {
 				ret += '?';
 			}
 			ret += strings[i + 1];
@@ -37,7 +41,7 @@ class Bindings {
 	next_anon() {
 		for (let i = 0; i < this.inner.length; ++i) {
 			const arg = this.inner[i];
-			if ((typeof arg != 'object' && typeof arg != 'function') || arg instanceof ArrayBuffer || ArrayBuffer.isView(arg)) {
+			if (is_anon_arg(arg)) {
 				return this.inner.splice(i, 1)[0];
 			}
 		}
@@ -45,7 +49,8 @@ class Bindings {
 	next_named() {
 		for (let i = 0; i < this.inner.length; ++i) {
 			const arg = this.inner[i];
-			if (typeof arg == 'object' && !(arg instanceof ArrayBuffer) && !ArrayBuffer.isView(arg) && !(arg instanceof SqlCommand)) {
+			// TODO: I don't like the SqlCommand thing
+			if (!is_anon_arg(arg) && !(arg instanceof SqlCommand)) {
 				return this.inner.splice(i, 1)[0];
 			}
 		}
