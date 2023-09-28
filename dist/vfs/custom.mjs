@@ -11,7 +11,7 @@ import {
 	sqlite3, imports, read_str, mem8, memdv, encoder, handle_error,
 } from "../sqlite.mjs";
 import {
-	SQLITE_OK,
+	SQLITE_OK, SQLITE_BUSY,
 	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READONLY, SQLITE_OPEN_READWRITE,
 	SQLITE_FCNTL_VFS_POINTER, SQLITE_FCNTL_FILE_POINTER,
 } from "../sqlite_def.mjs";
