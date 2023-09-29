@@ -3,52 +3,114 @@
 	"sql.mjs": "https://unpkg.com/sql.mjs"	
 }}</script>
 <script type="importmap">{ "imports": {
-	"sql.mjs": "/dist/index.mjs"
+	"sql.mjs": "/dist/index.mjs",
+	"sql.mjs/": "/dist/"
 }}</script>
 <script type="module">
 	import {
-		Conn, OpenParams, exec, SqliteBlob
+		ConnPool, OpenParams, exec
 	} from 'sql.mjs';
+	import 'sql.mjs/blob_io.mjs';
 
-	const conn = new Conn();
-	await conn.open(new OpenParams({pathname: 'test.db'}));
-
-	// Create the files tables
-	await exec(conn.sql`
-CREATE TABLE IF NOT EXISTS files (
-	filename TEXT NOT NULL UNIQUE,
-	data BLOB NOT NULL,
-	type TEXT DEFAULT 'text/plain'
-) STRICT;`);
-
-
-	const list = document.createElement('ul');
-	document.body.append(list);
-	for await (const {filename, rowid, type, size} of conn.sql`SELECT rowid, filename, type, length(data) AS size FROM files`) {
-		const li = document.createElement('li');
-		li.innerText = `${filename} - ${size}b - ${type}`;
-		list.append(li);
-	}
-
-	const file_select = document.createElement('input');
-	file_select.setAttribute('type', 'file');
-	document.body.append(file_select);
-
-	file_select.addEventListener('input', async ({ target: { files }}) => {
-		for (const file of files) {
-			console.log(file);
-			// Insert the file into the files table:
-			const [rowid] = await exec(conn.sql`
-				BEGIN;
-				INSERT INTO files VALUES (${file.name}, zeroblob(${file.size}), ${file.type});
-				SELECT last_insert_rowid();
-			`);
-			const blob = await SqliteBlob.open(conn, 'files', 'data', rowid);;
-			await blob.write_from(file.stream());
-			await blob.close();
-			await exec(conn.sql`COMMIT`);
-		}
+	const pool = new ConnPool(new OpenParams({pathname: 'blob-testing.db', vfs: 'opfs'}), {
+		// Enable incremental blob io (the blob_io sql function):
+		init(conn) { conn.enable_blob_io(); }
 	});
 
-	// console.log(await rows(sql`SELECT test_func(randomblob(9))`));
+	// Run the schema:
+	await pool.borrow(async conn => {
+		await exec(conn.sql`
+			CREATE TABLE IF NOT EXISTS files (
+				filename TEXT NOT NULL UNIQUE,
+				type TEXT DEFAULT 'text/plain',
+				data BLOB NOT NULL
+			) STRICT;
+		`);
+	});
+
+	// Upload interface:
+	const upload = document.createElement('button');
+	upload.innerText = 'Upload';
+	upload.onclick = async () => {
+		// Show the file picker:
+		const files = await showOpenFilePicker({
+			multiple: true,
+			// Allow all mime types
+		});
+		await pool.borrow(async conn => {
+			// Start the (write) transaction:
+			await exec(conn.sql`BEGIN IMMEDIATE;`);
+
+			for (const file of files) {
+				const blob = await file.getFile();
+				const [bytes_written] = await exec(conn.sql`
+					-- Reserve space for the file's data using a zero-blob
+					INSERT INTO files VALUES (${blob.name}, ${blob.type}, zeroblob(${blob.size}));
+					-- Stream the file's data into the blob
+					--   blob_io() will use incremental IO to write the stream into the blob
+					SELECT blob_io(${blob.stream()}, last_insert_rowid(), 'files', 'data');
+				`);
+				console.log('Wrote a file:', blob, 'bytes written', bytes_written);
+			}
+
+			await exec(conn.sql`COMMIT;`);
+		});
+	};
+	document.body.append(upload);
+
+	// List / View interface:
+	const obj_urls = new Set();
+	const table = document.createElement('table');
+	table.innerHTML = `
+		<thead>
+			<tr>
+				<th>Filename</th>
+				<th>Content Type</th>
+				<th>Length</th>
+			</tr>
+		</thead>
+	`;
+	const tbody = document.createElement('tbody');
+	table.append(tbody);
+	const list = document.createElement('button');
+	list.innerText = 'List Files';
+	list.onclick = () => pool.borrow(async conn => {
+		tbody.innerHTML = '';
+		for (const url of obj_urls) {
+			URL.revokeObjectURL(url);
+		}
+		
+		await exec(conn.sql`BEGIN;`);
+		for await (const {rowid, filename, type, size} of conn.sql`SELECT rowid, filename, type, length(data) AS size FROM files;`) {
+			// Create a blob and then object URL for the file:
+			const blob = await (async () => {
+				const ts = new TransformStream();
+	
+				const res = new Response(ts.readable, { headers: {
+					'Content-Type': type,
+				}});
+	
+				// Simultaneously Turn the response into a js Blob and stream the SQLite Blob into the request.
+				const [ret] = await Promise.all([
+					res.blob(),
+					exec(conn.sql`SELECT blob_io(${ts.writable}, ${rowid}, 'files', 'data');`)
+				]);
+				return ret;
+			})();
+
+			const obj_url = URL.createObjectURL(blob);
+			obj_urls.add(obj_url);
+
+			// Live on the edge and don't escape your html!
+			tbody.insertAdjacentHTML('beforeend',
+				`<tr>
+					<td><a href="${obj_url}">${filename}</a></td>
+					<td>${type}</td>
+					<td>${size}</td>
+				</tr>`
+			);
+		}
+		await exec(conn.sql`COMMIT;`);
+	});
+	document.body.append(table, list);
 </script>

@@ -185,7 +185,7 @@ Object.assign(imports['vfs'], {
 	}),
 	xGetLastError: vfs_wrapper(function xGetLastError({errors}, buff_len, buff_ptr) {
 		const e = errors[errors.length];
-		let msg = e ? `${e.name}: ${e.message}\0` : '<No Error>\0';
+		const msg = e ? `${e.name}: ${e.message}\0` : '<No Error>\0';
 		encoder.encodeInto(msg, mem8(buff_ptr, buff_len));
 		return SQLITE_OK;
 	}),
