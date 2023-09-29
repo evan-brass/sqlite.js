@@ -1,16 +1,17 @@
 import { Conn } from "./conn.mjs";
-import { sqlite3, imports, memdv, handle_error } from "./sqlite.mjs";
-import { dyn_s, free_s } from "./strings.mjs";
-import { OutOfMemError, is_promise } from "./util.mjs";
+import { sqlite3, imports, memdv } from "./sqlite.mjs";
+import { str_ptr, handle_error } from "./strings.mjs";
+import { is_promise } from "./util.mjs";
 import { Resultable, value_to_js } from "./value.mjs";
 
 const funcs = new Map(); // func_name_ptr -> Func
 
+let func_i = 0;
+
 Conn.prototype.create_scalarf = function create_scalarf(func, { func_name = func.name, flags = 0, n_args = func.length } = {}) {
-	const name = dyn_s(func_name, { unique: true });
-	if (!name) throw new OutOfMemError();
-	funcs.set(name.ptr, func);
-	const res = sqlite3.create_scalar_function(this.ptr, name, n_args, flags);
+	const fi = ++func_i;
+	funcs.set(fi, func);
+	const res = sqlite3.create_scalar_function(this.ptr, str_ptr(func_name), fi, n_args, flags);
 	handle_error(res, this.ptr);
 };
 
@@ -70,9 +71,10 @@ imports['func'] = {
 		const func = get_func(ctx_ptr);
 		debugger;
 	},
-	xDestroy(func_name_ptr) {
-		funcs.delete(func_name_ptr);
-		sqlite3.free(func_name_ptr);
+	xDestroy(fi) {
+		funcs.delete(fi);
+		// TODO: str_free() the function name?
+		// sqlite3.free(func_name_ptr);
 		debugger;
 	},
 	xValue(ctx_ptr) {

@@ -8,14 +8,14 @@
 import './basics.mjs';
 import { OutOfMemError } from "../util.mjs";
 import {
-	sqlite3, imports, read_str, mem8, memdv, encoder, handle_error,
+	sqlite3, imports, mem8, memdv, 
 } from "../sqlite.mjs";
 import {
 	SQLITE_OK, SQLITE_BUSY,
 	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READONLY, SQLITE_OPEN_READWRITE,
 	SQLITE_FCNTL_VFS_POINTER, SQLITE_FCNTL_FILE_POINTER,
 } from "../sqlite_def.mjs";
-import { dyn_s } from '../strings.mjs';
+import { str_ptr, str_free, str_read, handle_error, encoder } from '../strings.mjs';
 import { Conn } from "../conn.mjs";
 
 const vfs_impls = new Map(); // ptr -> { vfs, errors }
@@ -23,37 +23,35 @@ const file_impls = new Map(); // ptr -> { file, errors }
 
 // Expose access to the file / vfs on the connection
 Object.assign(Conn.prototype, {
-	vfs(db_name = stat_s('main')) {
+	vfs(db_name = 'main') {
 		if (!this.ptr) return;
 
-		const name = dyn_s(db_name);
 		const vfs_ptr_ptr = sqlite3.malloc(4);
+		if (!vfs_ptr_ptr) throw new OutOfMemError();
 		try {
-			if (!vfs_ptr_ptr || !name) throw new OutOfMemError();
-			const res = sqlite3.sqlite3_file_control(this.ptr, name, SQLITE_FCNTL_VFS_POINTER, vfs_ptr_ptr);
+			const res = sqlite3.sqlite3_file_control(this.ptr, str_ptr(db_name), SQLITE_FCNTL_VFS_POINTER, vfs_ptr_ptr);
 			handle_error(res);
 			const vfs_ptr = memdv().getInt32(vfs_ptr_ptr, true);
 			const vfs = vfs_impls.get(vfs_ptr)?.vfs;
 			return vfs;
 		} finally {
-			free_s(name);
+			str_free(db_name);
 			sqlite3.free(vfs_ptr_ptr);
 		}
 	},
-	file(db_name = stat_s('main')) {
+	file(db_name = 'main') {
 		if (!this.ptr) return;
 
-		const name = dyn_s(db_name);
 		const file_ptr_ptr = sqlite3.malloc(4);
+		if (!file_ptr_ptr) throw new OutOfMemError();
 		try {
-			if (!file_ptr_ptr || !name) throw new OutOfMemError();
-			const res = sqlite3.sqlite3_file_control(this.ptr, name, SQLITE_FCNTL_FILE_POINTER, file_ptr_ptr);
+			const res = sqlite3.sqlite3_file_control(this.ptr, str_ptr(db_name), SQLITE_FCNTL_FILE_POINTER, file_ptr_ptr);
 			handle_error(res);
 			const file_ptr = memdv().getInt32(file_ptr_ptr, true);
 			const file = file_impls.get(file_ptr)?.file;
 			return file;
 		} finally {
-			free_s(name);
+			str_free(db_name);
 			sqlite3.free(file_ptr_ptr);
 		}
 	}
@@ -63,9 +61,7 @@ Object.assign(Conn.prototype, {
 class FakeFile { close() { /* No Op */ } }
 
 export function register_vfs(vfs, make_default = false) {
-	const name = dyn_s(vfs.name);
-	if (!name) throw new OutOfMemError();
-	const vfs_ptr = sqlite3.allocate_vfs(name, vfs.max_pathname);
+	const vfs_ptr = sqlite3.allocate_vfs(str_ptr(vfs.name), vfs.max_pathname);
 	if (!vfs_ptr) throw new OutOfMemError();
 	vfs_impls.set(vfs_ptr, { vfs, errors: []});
 
@@ -83,37 +79,36 @@ class Filename {
 		if (this.#ptr == 0) {
 			return crypto.getRandomValues(new Uint8Array(8)).reduce((a, i) => a + i.toString(16).padStart(2, '0')) + '.tmp';
 		}
-		return read_str(this.#ptr);
+		return str_read(this.#ptr);
 	}
 	get_parameter(param, def_val) {
-		param = dyn_s(param);
-		if (!param) throw new OutOfMemError();
+		const param_ptr = str_ptr(param);
 		try {
 			if (typeof def_val == 'boolean') {
-				const res = sqlite3.sqlite3_uri_boolean(this.#ptr, param, Number(def_val));
+				const res = sqlite3.sqlite3_uri_boolean(this.#ptr, param_ptr, Number(def_val));
 				return Boolean(res);
 			}
 			else if (typeof def_val == 'number') {
-				return Number(sqlite3.sqlite3_uri_int64(this.#ptr, param, BigInt(def_val)));
+				return Number(sqlite3.sqlite3_uri_int64(this.#ptr, param_ptr, BigInt(def_val)));
 			}
 			else if (typeof def_val == 'bigint') {
-				return sqlite3.sqlite3_uri_int64(this.#ptr, param, def_val);
+				return sqlite3.sqlite3_uri_int64(this.#ptr, param_ptr, def_val);
 			}
 			else {
-				const res = sqlite3.sqlite3_uri_parameter(this.#ptr, param);
-				return res ? read_str(res) : def_val;
+				const res = sqlite3.sqlite3_uri_parameter(this.#ptr, param_ptr);
+				return res ? str_read(res) : def_val;
 			}
 		} finally {
-			sqlite3.free(param);
+			str_free(param);
 		}
 	}
 	*[Symbol.iterator]() {
 		for (let i = 0; true; ++i) {
 			const param_ptr = sqlite3.sqlite3_uri_key(this.#ptr, i);
 			if (!param_ptr) break;
-			const param = read_str(param_ptr);
+			const param = str_read(param_ptr);
 			const val_ptr = sqlite3.sqlite3_uri_parameter(this.#ptr, param_ptr);
-			const val = read_str(val_ptr);
+			const val = str_read(val_ptr);
 			yield [param, val];
 		}
 	}
@@ -177,7 +172,7 @@ Object.assign(imports['vfs'], {
 		return SQLITE_OK;
 	}),
 	xFullPathname: vfs_wrapper(async function xFullPathname({vfs}, filename_ptr, buff_len, buff_ptr) {
-		const filename = read_str(filename_ptr);
+		const filename = str_read(filename_ptr);
 		let full = await vfs.full_pathname(filename);
 		if (!full.endsWith('\0')) full += '\0';
 		encoder.encodeInto(full, mem8(buff_ptr, buff_len));

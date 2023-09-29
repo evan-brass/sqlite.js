@@ -2,8 +2,8 @@ import './func.mjs';
 import { Pointer, Bindable } from "./value.mjs";
 import { Conn } from "./conn.mjs";
 import { OutOfMemError } from "./util.mjs";
-import { stat_s } from "sql.mjs/strings.mjs";
-import { handle_error, mem8, memdv, sqlite3 } from "sql.mjs/sqlite.mjs";
+import { str_ptr, handle_error } from "./strings.mjs";
+import { mem8, memdv, sqlite3 } from "./sqlite.mjs";
 
 // We make ReadableStream / WritableStream Bindable by wrapping them in a StreamHandle which is a subclass of Pointer
 class StreamHandle extends Pointer {
@@ -45,7 +45,7 @@ async function blob_io(stream_handle, _rowid, _table_name, _column_name, _db_nam
 		const rowid_bi = sqlite3.sqlite3_value_int64(this.value_ptr(1));
 		const table_name_ptr = sqlite3.sqlite3_value_text(this.value_ptr(2));
 		const column_name_ptr = sqlite3.sqlite3_value_text(this.value_ptr(3));
-		const db_name_ptr = (this.num_args > 4) ? sqlite3.sqlite3_value_text(this.value_ptr(4)) : stat_s('main');
+		const db_name_ptr = (this.num_args > 4) ? sqlite3.sqlite3_value_text(this.value_ptr(4)) : str_ptr('main');
 
 		let handle_ptr;
 		try {
