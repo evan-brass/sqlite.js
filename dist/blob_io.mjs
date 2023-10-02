@@ -1,9 +1,9 @@
 import './func.mjs';
 import { Pointer, Bindable } from "./value.mjs";
 import { Conn } from "./conn.mjs";
-import { OutOfMemError } from "./util.mjs";
-import { str_ptr, handle_error } from "./strings.mjs";
+import { handle_error } from "./strings.mjs";
 import { mem8, memdv, sqlite3 } from "./sqlite.mjs";
+import { borrow_mem } from "./memory.mjs";
 
 // We make ReadableStream / WritableStream Bindable by wrapping them in a StreamHandle which is a subclass of Pointer
 class StreamHandle extends Pointer {
@@ -24,103 +24,90 @@ Object.assign(WritableStream.prototype, {
 // Each connection will need to have incremental blob io re-registered
 Object.assign(Conn.prototype, {
 	enable_blob_io() {
-		this.create_scalarf(blob_io);
-		this.create_scalarf(blob_io, {n_args: blob_io.length - 1}); // db_name has a default value of "main"
+		this.create_scalarf(blob_io, {n_args: blob_io.length});
+		this.create_scalarf(blob_io, {n_args: blob_io.length + 1});
+		this.create_scalarf(blob_io, {n_args: blob_io.length + 2});
+		this.create_scalarf(blob_io, {n_args: blob_io.length + 3});
+		this.create_scalarf(blob_io, {n_args: blob_io.length + 4});
 	}
 });
 
-async function blob_io(stream_handle, _rowid, _table_name, _column_name, _db_name) {
+function blob_io(stream_handle, rowid, table_name, column_name, db_name = 'main', offset = 0, length = -1, buffer_size = 2048) {
 	if (!(stream_handle instanceof StreamHandle)) throw new Error("First argument must be a StreamHandle.");
 
-	const handle_ptr_ptr = sqlite3.malloc(4);
-	let buffer_ptr = 0, buffer_len = 0;
-	try {
-		if (!handle_ptr_ptr) throw new OutOfMemError();
-
-		// We read the ReadableStream, but *write* the data to the Blob (hence writable access)
-		// When we have a WritableStream then we *read* from the blob and write to the stream.
-		const flags = (stream_handle.stream instanceof ReadableStream) ? 1 : 0;
-		
-		// Argument 0 is the stream_handle
-		const rowid_bi = sqlite3.sqlite3_value_int64(this.value_ptr(1));
-		const table_name_ptr = sqlite3.sqlite3_value_text(this.value_ptr(2));
-		const column_name_ptr = sqlite3.sqlite3_value_text(this.value_ptr(3));
-		const db_name_ptr = (this.num_args > 4) ? sqlite3.sqlite3_value_text(this.value_ptr(4)) : str_ptr('main');
-
-		let handle_ptr;
-		try {
-			const res = await sqlite3.sqlite3_blob_open(this.db, db_name_ptr, table_name_ptr, column_name_ptr, rowid_bi, flags, handle_ptr_ptr);
-			handle_ptr = memdv().getInt32(handle_ptr_ptr, true);
-			handle_error(res, this.db);
-
-			// Do the things:
-			const initial_offset = 0;
-			let offset = initial_offset;
-			if (stream_handle.stream instanceof ReadableStream) {
-				const reader = stream_handle.stream.getReader();
-				while(1) {
-					const {value, done} = await reader.read();
-					if (done) break;
-					const len = value.byteLength;
-
-					// Alloc / Resize the WASM side buffer to handle the chunk:
-					if (buffer_len < len) {
-						buffer_len = Math.max(2 * (buffer_len || 1024), len);
-						buffer_ptr = sqlite3.realloc(buffer_ptr, buffer_len);
-						if (!buffer_ptr) throw new OutOfMemError();
-					}
-
-					// Copy the chunk into WASM memory:
-					mem8(buffer_ptr, len).set(value);
-
-					// Tell SQLite to write to the blob:
-					const res = await sqlite3.sqlite3_blob_write(handle_ptr, buffer_ptr, len, offset);
-					try { handle_error(res, this.db); }
-					catch (e) {
-						// Let the reader know if we cancel:
-						await reader.cancel(e);
-						throw e;
-					}
-	
-					offset += len;
-				}
-			}
-			else if (stream_handle.stream instanceof WritableStream) {
-				const write_buff_len = 2048;
-				const writer = stream_handle.stream.getWriter();
-				const blob_len = sqlite3.sqlite3_blob_bytes(handle_ptr);
-				while (offset < blob_len) {
-					const chunk_len = Math.min(write_buff_len, blob_len - offset);
-					
-					// Allocate / Resize the WASM side buffer
-					if (buffer_len < chunk_len) {
-						buffer_len = chunk_len;
-						buffer_ptr = sqlite3.realloc(buffer_ptr, chunk_len);
-						if (!buffer_ptr) throw new OutOfMemError();
-					}
-
-					// Wait for the writer to be ready and for SQLite to fill the WASM side buffer
-					const [_, res] = await Promise.all([writer.ready, sqlite3.sqlite3_blob_read(handle_ptr, buffer_ptr, chunk_len, offset)]);
-					try { handle_error(res, this.db); }
-					catch (e) {
-						await writer.abort(e);
-						throw e; // Rethrow the error
-					}
-
-					await writer.write(mem8(buffer_ptr, chunk_len)); // TODO: Does this need a .slice() because of WASM memory detachment?
-
-					offset += chunk_len;
-				}
-				await writer.close();
-			}
-			// Return the number of bytes written to the blob:
-			return offset - initial_offset;
-		} finally {
-			// Does this need to be awaited or not?
-			await sqlite3.sqlite3_blob_close(handle_ptr);
-		}
-	} finally {
-		sqlite3.free(handle_ptr_ptr);
-		sqlite3.free(buffer_ptr);
+	if ([typeof table_name, typeof column_name, typeof db_name].some(typ => typ !== 'string')) {
+		throw new Error("Expected table_name, column_name, and db_name to all be string arguments");
 	}
+
+	return borrow_mem(
+		[4, Number(buffer_size), table_name, column_name, db_name],
+		async (handle_ptr, buffer, table_name, column_name, db_name) => {
+			// We read the ReadableStream, but *write* the data to the Blob (hence writable access)
+			// When we have a WritableStream then we *read* from the blob and write to the stream (readonly access).
+			const flags = (stream_handle.stream instanceof ReadableStream) ? 1 : 0;
+
+			let handle;
+			try {
+				const res = await sqlite3.sqlite3_blob_open(this.db, db_name, table_name, column_name, BigInt(rowid), flags, handle_ptr);
+				handle = memdv().getInt32(handle_ptr, true);
+				handle_error(res, this.db);
+
+				// Load the length if it's not set:
+				if (length < 0) length = sqlite3.sqlite3_blob_bytes(handle) - offset;
+				const end = offset + length;
+				const init_offset = offset;
+
+				// Do the things
+				if (flags /* ReadableStream */) {
+					const reader = stream_handle.stream.getReader({mode: 'byob'});
+					let transfer = new Uint8Array(buffer.len); // This is the byob buffer that gets transferred back and forth
+
+					while (1) {
+						if (offset >= end) { reader.releaseLock(); break; }
+
+						const {value, done} = await reader.read(transfer);
+						if (value === undefined) throw new Error('Stream was cancelled'); // TODO: Should this just be a break?
+						transfer = value;
+						
+						mem8(buffer, buffer.len).set(value);
+						const res = await sqlite3.sqlite3_blob_write(handle, buffer, value.byteLength, offset);
+						try { handle_error(res, this.db); }
+						catch (e) {
+							// Let the reader know if we cancel:
+							await reader.cancel(e);
+							throw e;
+						}
+						
+						offset += value.byteLength;
+						if (done) break;
+					}
+				}
+				else /* WritableStream */ {
+					const writer = stream_handle.stream.getWriter();
+					while (offset < end) {
+						const chunk_len = Math.min(buffer.len, end - offset);
+
+						// Wait for the writer to be ready and for SQLite to fill the WASM side buffer
+						const [_, res] = await Promise.all([writer.ready, sqlite3.sqlite3_blob_read(handle, buffer, chunk_len, offset)]);
+						try { handle_error(res, this.db); }
+						catch (e) {
+							await writer.abort(e);
+							throw e; // Rethrow the error
+						}
+
+						await writer.write(mem8(buffer, chunk_len));
+
+						offset += chunk_len;
+					}
+					await writer.close();
+				}
+
+				// Return the number of bytes read / written:
+				return offset - init_offset;
+			} finally {
+				// Does this need to be awaited or not?
+				await sqlite3.sqlite3_blob_close(handle);
+			}
+		}
+	);
 }

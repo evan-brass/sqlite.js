@@ -7,6 +7,7 @@ import {
 } from "./sqlite_def.mjs";
 import { Bindable, value_to_js } from './value.mjs';
 import { str_ptr, str_len, str_free, str_read, handle_error } from './strings.mjs';
+import { borrow_mem } from "./memory.mjs";
 
 export const SqlCommand = new Trait("This trait marks special commands which can be used inside template literals tagged with the Conn.sql tag.");
 
@@ -85,25 +86,19 @@ export class Conn {
 	async open(params = new OpenParams()) {
 		await sqlite_initialized;
 
-		let conn = 0;
-		const conn_ptr = sqlite3.malloc(4);
-		if (!conn_ptr) throw new OutOfMemError();
-		try {
-			const res = await sqlite3.sqlite3_open_v2(str_ptr(params.pathname), conn_ptr, params.flags, str_ptr(params.vfs));
-			conn = memdv().getInt32(conn_ptr, true);
-			handle_error(res, conn);
-		} catch(e) {
-			sqlite3.sqlite3_close_v2(conn);
-			throw e;
-		} finally {
-			str_free(params.pathname);
-			str_free(params.vfs);
-			sqlite3.free(conn_ptr);
-		}
+		let conn;
+		await borrow_mem([4, params.pathname, params.vfs], async (conn_ptr, pathname, vfs) => {
+			try {
+				const res = await sqlite3.sqlite3_open_v2(pathname, conn_ptr, params.flags, vfs);
+				conn = memdv().getInt32(conn_ptr, true);
+				handle_error(res);
+			} catch (e) {
+				sqlite3.sqlite3_close_v2(conn);
+				throw e;
+			}
+		});
 
-		if (this.ptr) {
-			this.close();
-		}
+		if (this.ptr) this.close();
 		this.ptr = conn;
 	}
 	async *backup(dest, { src_db = 'main', dest_db = 'main', pages_per = 5 } = {}) {
@@ -146,13 +141,10 @@ export class Conn {
 	// Meta
 	filename(db_name = 'main') {
 		if (!this.ptr) return;
-		try {
-			if (!name) throw new OutOfMemError();
-			const filename_ptr = sqlite3.sqlite3_db_filename(this.ptr, str_ptr(db_name));
+		borrow_mem(db_name, db_name => {
+			const filename_ptr = sqlite3.sqlite3_db_filename(this.ptr, db_name);
 			return str_read(filename_ptr) || ':memory:';
-		} finally {
-			str_free(db_name);
-		}
+		});
 	}
 	get interrupted() {
 		if (!this.ptr) return false;
@@ -168,20 +160,24 @@ export class Conn {
 		}
 	}
 	// Useful things:
-	async *stmts(sql) {
-		if (!sql) return; // Fast path empty sql (useful if you send a single command using Conn.sql)
+	async *stmts(sql_txt) {
+		if (!sql_txt) return; // Fast path empty sql (useful if you send a single command using Conn.sql)
 		
 		await sqlite_initialized;
 
-		const sql_end_ptr = sqlite3.malloc(4);
-		const stmt_ptr = sqlite3.malloc(4);
-		try {
-			if (!sql_end_ptr || !stmt_ptr) throw new OutOfMemError();
+		// Borrow the memory we need.  Unfortunately because we're an async generator we have to use a promise to signal when to release that memory, instead of the usual closure system.
+		let ptrs, release_mem;
+		borrow_mem([4, 4, sql_txt], (...t) => {
+			ptrs = t;
+			return new Promise(res => release_mem = res);
+		});
+		const [sql_end_ptr, stmt_ptr, sql] = ptrs;
 
-			const sql_ptr = str_ptr(sql);
-			memdv().setInt32(sql_end_ptr, sql_ptr, true);
-			const sql_end = sql_ptr + str_len(sql);
-	
+		// Initialize the sql_end_ptr to be the start of the allocated sql text
+		memdv().setInt32(sql_end_ptr, sql, true);
+		const sql_end = Number(sql) + sql.len;
+
+		try {
 			while (1) {
 				const sql_ptr = memdv().getInt32(sql_end_ptr, true);
 				const remainder = sql_end - sql_ptr;
@@ -202,9 +198,7 @@ export class Conn {
 				}
 			}
 		} finally {
-			str_free(sql);
-			sqlite3.free(sql_end_ptr);
-			sqlite3.free(stmt_ptr);
+			release_mem();
 		}
 	}
 	async *sql(strings, ...args) {
@@ -246,7 +240,7 @@ export class Conn {
 				yield row;
 			}
 
-			let command = bindings.command();
+			const command = bindings.command();
 			if (command instanceof SqlCommand) {
 				await command[SqlCommand](this);
 			}
