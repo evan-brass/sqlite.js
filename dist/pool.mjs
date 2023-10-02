@@ -1,6 +1,6 @@
 import { Conn, OpenParams } from './conn.mjs';
 import { sqlite3 } from './sqlite.mjs';
-import { str_ptr, handle_error } from './strings.mjs';
+import { leaky, handle_error } from "./memory.mjs";
 
 export class ConnPool {
 	#conn_count = 0;
@@ -21,7 +21,7 @@ export class ConnPool {
 	}
 	async return_conn(conn) {
 		if (!conn.autocommit) {
-			const res = await sqlite3.sqlite3_exec(conn.ptr, str_ptr('ROLLBACK;'), 0, 0, 0);
+			const res = await sqlite3.sqlite3_exec(conn.ptr, leaky('ROLLBACK;'), 0, 0, 0);
 			handle_error(res);
 		}
 		if (this.#waiters.length) {

@@ -1,4 +1,4 @@
-import { OutOfMemError, Trait } from './util.mjs';
+import { Trait } from './util.mjs';
 import { default as sqlite_initialized, sqlite3, memdv } from './sqlite.mjs';
 import {
 	SQLITE_ROW, SQLITE_DONE,
@@ -6,8 +6,7 @@ import {
 
 } from "./sqlite_def.mjs";
 import { Bindable, value_to_js } from './value.mjs';
-import { str_ptr, str_len, str_free, str_read, handle_error } from './strings.mjs';
-import { borrow_mem } from "./memory.mjs";
+import { borrow_mem, str_read, handle_error } from "./memory.mjs";
 
 export const SqlCommand = new Trait("This trait marks special commands which can be used inside template literals tagged with the Conn.sql tag.");
 
@@ -110,10 +109,16 @@ export class Conn {
 			dconn = dest;
 		} else { throw new Error(); }
 
+		let mem, release_mem;
+		borrow_mem([src_db, dest_db], (...t) => {
+			mem = t;
+			return new Promise(res => release_mem = res);
+		});
+		[src_db, dest_db] = mem;
+
 		let backup;
 		try {
-			if (!src_name || !dest_name) throw new OutOfMemError();
-			backup = await sqlite3.sqlite3_backup_init(dconn.ptr, str_ptr(dest_db), this.ptr, str_ptr(src_db)); // Does this need to be awaited?
+			backup = await sqlite3.sqlite3_backup_init(dconn.ptr, dest_db, this.ptr, src_db); // Does this need to be awaited?
 			if (!backup) throw new Error('Backup failed');
 
 			while (1) {
@@ -128,8 +133,7 @@ export class Conn {
 			}
 		} finally {
 			sqlite3.sqlite3_backup_finish(backup);
-			str_free(dest_db);
-			str_free(src_db);;
+			release_mem();
 			if (dconn != dest) dconn.close();
 		}
 	}

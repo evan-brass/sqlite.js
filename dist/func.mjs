@@ -1,8 +1,8 @@
 import { Conn } from "./conn.mjs";
 import { sqlite3, imports, memdv } from "./sqlite.mjs";
-import { str_ptr, handle_error } from "./strings.mjs";
 import { is_promise } from "./util.mjs";
 import { Resultable, value_to_js } from "./value.mjs";
+import { leaky, handle_error } from "./memory.mjs";
 
 const funcs = new Map(); // func_name_ptr -> Func
 
@@ -11,7 +11,7 @@ let func_i = 0;
 Conn.prototype.create_scalarf = function create_scalarf(func, { func_name = func.name, flags = 0, n_args = func.length } = {}) {
 	const fi = ++func_i;
 	funcs.set(fi, func);
-	const res = sqlite3.create_scalar_function(this.ptr, str_ptr(func_name), fi, n_args, flags);
+	const res = sqlite3.create_scalar_function(this.ptr, leaky(func_name), fi, n_args, flags);
 	handle_error(res, this.ptr);
 };
 
@@ -73,7 +73,6 @@ imports['func'] = {
 	},
 	xDestroy(fi) {
 		funcs.delete(fi);
-		// TODO: str_free() the function name?
 		// sqlite3.free(func_name_ptr);
 		debugger;
 	},

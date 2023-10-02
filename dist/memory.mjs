@@ -1,9 +1,31 @@
 import { sqlite3, mem8 } from "./sqlite.mjs";
 import { OutOfMemError, is_promise } from "sql.mjs/util.mjs";
+import { SQLITE_OK, SQLITE_ROW, SQLITE_DONE } from "./sqlite_def.mjs";
 
-const encoder = new TextEncoder();
+export const encoder = new TextEncoder();
+export const decoder = new TextDecoder();
 
-class Span {
+export function handle_error(code, conn) {
+	if (code == SQLITE_OK || code == SQLITE_ROW || code == SQLITE_DONE) return;
+	let ptr;
+	if (conn) {
+		ptr = sqlite3.sqlite3_errmsg(conn);
+	} else {
+		ptr = sqlite3.sqlite3_errstr(code);
+	}
+	const msg = str_read(ptr);
+	throw new Error(`SQLite Error(${code}): ${msg}`);
+}
+
+export function str_read(ptr, len = sqlite3.strlen(ptr)) {
+	let ret = '';
+	if (len > 0) {
+		ret = decoder.decode(mem8(ptr, len));
+	}
+	return ret;
+}
+
+export class Span {
 	#ptr = 0;
 	#len = 0;
 	constructor(ptr, len) {
@@ -16,6 +38,36 @@ class Span {
 	get len() {
 		return this.#len;
 	}
+}
+
+const leaked = new Map();
+
+export function leaky(v) {
+	if (typeof v == 'string' && !v.endsWith('\0')) {
+		v += '\0';
+	}
+	let span = leaked.get(v);
+	if (!span) {
+		let init;
+		if (typeof v == 'string') {
+			init = encoder.encode(v);
+		}
+		else if (v instanceof ArrayBuffer) {
+			init = new Uint8Array(v);
+		}
+		else if (ArrayBuffer.isView(v)) {
+			init = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+		}
+		else { throw new Error("Can't make a static from this value"); }
+
+		const ptr = sqlite3.malloc(init.byteLength);
+		if (!ptr) throw new OutOfMemError();
+		mem8(ptr, init.byteLength).set(init);
+
+		span = new Span(ptr, init.byteLength);
+		leaked.set(v, span);
+	}
+	return span;
 }
 
 // This is a little bit like having a stack frame.

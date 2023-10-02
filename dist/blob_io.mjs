@@ -1,9 +1,8 @@
 import './func.mjs';
 import { Pointer, Bindable } from "./value.mjs";
 import { Conn } from "./conn.mjs";
-import { handle_error } from "./strings.mjs";
 import { mem8, memdv, sqlite3 } from "./sqlite.mjs";
-import { borrow_mem } from "./memory.mjs";
+import { borrow_mem, handle_error } from "./memory.mjs";
 
 // We make ReadableStream / WritableStream Bindable by wrapping them in a StreamHandle which is a subclass of Pointer
 class StreamHandle extends Pointer {
