@@ -1,9 +1,17 @@
-import { sqlite3, mem8 } from "./sqlite.mjs";
+import { sqlite3, mem8, imports } from "./sqlite.mjs";
 import { OutOfMemError, is_promise } from "sql.mjs/util.mjs";
 import { SQLITE_OK, SQLITE_ROW, SQLITE_DONE } from "./sqlite_def.mjs";
 
 export const encoder = new TextEncoder();
 export const decoder = new TextDecoder();
+
+imports['env'] ??= {};
+Object.assign(imports['env'], {
+	log(_, code, msg_ptr) {
+		const msg = str_read(msg_ptr);
+		console.log(`SQLite(${code}): ${msg}`);
+	}
+});
 
 export function handle_error(code, conn) {
 	if (code == SQLITE_OK || code == SQLITE_ROW || code == SQLITE_DONE) return;
