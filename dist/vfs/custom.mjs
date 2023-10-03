@@ -166,10 +166,13 @@ Object.assign(imports['vfs'], {
 		return SQLITE_OK;
 	}),
 	xGetLastError: vfs_wrapper(function xGetLastError({errors}, buff_len, buff_ptr) {
-		const e = errors[errors.length];
-		const msg = e ? `${e.name}: ${e.message}\0` : '<No Error>\0';
-		encoder.encodeInto(msg, mem8(buff_ptr, buff_len));
-		return SQLITE_OK;
+		const e = errors[errors.length - 1];
+		if (e) {
+			encoder.encodeInto(String(e), mem8(buff_ptr, buff_len));
+			return SQLITE_IOERR;
+		} else {
+			return SQLITE_OK;
+		}
 	}),
 	// sqlite3_io_methods methods:
 	xClose: file_wrapper(async function xClose({file, file_ptr}) {
