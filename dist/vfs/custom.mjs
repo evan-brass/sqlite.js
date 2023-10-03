@@ -47,9 +47,6 @@ Object.assign(Conn.prototype, {
 	}
 });
 
-// SQLite calls .close on files, even if they fail to open... but we don't get a file_impl unless the open succeeds, so FakeFile just stops that from being an error.
-class FakeFile { close() { /* No Op */ } }
-
 export function register_vfs(vfs, make_default = false) {
 	const vfs_ptr = sqlite3.allocate_vfs(leaky(vfs.name), vfs.max_pathname);
 	if (!vfs_ptr) throw new OutOfMemError();
@@ -142,9 +139,12 @@ Object.assign(imports['vfs'], {
 		try {
 			file = await vfs.open(filename, flags & filter);
 			memdv().setInt32(flags_out, file.flags, true);
+			file_impls.set(file_out, { file: file, errors });
 			return SQLITE_OK;
-		} finally {
-			file_impls.set(file_out, { file: file ?? new FakeFile(), errors });
+		} catch (e) {
+			// Clear pMethods of the file since we failed to open it.  This prevents SQLite from calling .close
+			memdv().setInt32(file_out, 0, true);
+			throw e;
 		}
 	}),
 	xDelete: vfs_wrapper(async function xDelete({vfs}, filename_ptr, sync) {
