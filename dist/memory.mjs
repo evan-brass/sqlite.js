@@ -42,7 +42,11 @@ export class Span {
 
 const leaked = new Map();
 
+const null_span = new Span(0, 0);
+
 export function leaky(v) {
+	if (v === '') return null_span;
+
 	if (typeof v == 'string' && !v.endsWith('\0')) {
 		v += '\0';
 	}
@@ -71,28 +75,37 @@ export function leaky(v) {
 }
 
 // This is a little bit like having a stack frame.
-export function borrow_mem(args, func) {	
+export function borrow_mem(args, func) {
+	// Mapped is what we will pass to func:
+	const mapped = [];
+
 	// Get the sizes / initial values for the fields
 	const sizes = [];
 	const inits = []; // The values to set at the memory locations (Uint8Arrays)
 	for (const i in args) {
 		const arg = args[i];
-		if (typeof arg == 'number') {
+		if (arg === '') {
+			mapped[i] = null_span;
+		}
+		else if (typeof arg == 'number') {
 			sizes[i] = arg;
 		}
-		if (typeof arg == 'string') {
+		else if (typeof arg == 'string') {
 			const terminated = arg.endsWith('\0') ? arg : arg + '\0';
 			const encoded = encoder.encode(terminated);
 			inits[i] = encoded;
 			sizes[i] = encoded.byteLength;
 		}
-		if (ArrayBuffer.isView(arg)) {
+		else if (ArrayBuffer.isView(arg)) {
 			inits[i] = new Uint8Array(arg.buffer, arg.byteOffset, arg.byteLength);
 			sizes[i] = arg.byteLength;
 		}
-		if (arg instanceof ArrayBuffer) {
+		else if (arg instanceof ArrayBuffer) {
 			inits[i] = new Uint8Array(arg);
 			sizes[i] = arg.byteLength;
+		}
+		else {
+			throw new Error("borrow_mem doesn't know what to do with this kind of argument.");
 		}
 	}
 
@@ -111,7 +124,6 @@ export function borrow_mem(args, func) {
 	if (alloc === 0) throw new OutOfMemError();
 
 	// Initialize the memory, convert the relative pointers into absolute pointers
-	const mapped = [];
 	for (const i in ptrs) {
 		const ptr = alloc + ptrs[i];
 		mapped[i] = new Span(ptr, sizes[i]);
