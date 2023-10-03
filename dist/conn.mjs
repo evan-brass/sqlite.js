@@ -90,7 +90,7 @@ export class Conn {
 			try {
 				const res = await sqlite3.sqlite3_open_v2(pathname, conn_ptr, params.flags, vfs);
 				conn = memdv().getInt32(conn_ptr, true);
-				handle_error(res);
+				handle_error(res, conn);
 			} catch (e) {
 				sqlite3.sqlite3_close_v2(conn);
 				throw e;
