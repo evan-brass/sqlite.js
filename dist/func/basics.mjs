@@ -1,8 +1,12 @@
-import { Conn } from "./conn.mjs";
-import { sqlite3, imports, memdv } from "./sqlite.mjs";
-import { is_promise } from "./util.mjs";
-import { Resultable, value_to_js } from "./value.mjs";
-import { leaky, handle_error } from "./memory.mjs";
+/**
+ * basics.mjs - Adds support for defining / running custom scalar functions
+ */
+
+import { Conn } from "../conn.mjs";
+import { sqlite3, imports, memdv } from "../sqlite.mjs";
+import { is_promise } from "../util.mjs";
+import { Resultable, value_to_js } from "../value.mjs";
+import { leaky, handle_error } from "../memory.mjs";
 
 const funcs = new Map(); // func_name_ptr -> Func
 

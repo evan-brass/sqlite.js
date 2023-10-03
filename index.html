@@ -8,13 +8,15 @@
 }}</script>
 <script type="module">
 	import {
-		ConnPool, OpenParams, exec
+		ConnPool, OpenParams, exec, register_vfs
 	} from 'sql.mjs';
-	import 'sql.mjs/blob_io.mjs';
+	import opfs from 'sql.mjs/vfs/opfs.mjs';
+	import 'sql.mjs/func/blob_io.mjs';
 
 	const pool = new ConnPool(new OpenParams({pathname: 'blob-testing.db', vfs: 'opfs'}), {
-		// Enable incremental blob io (the blob_io sql function):
-		init(conn) { conn.enable_blob_io(); }
+		initialized() {
+			register_vfs(opfs);
+		}
 	});
 
 	// Run the schema:

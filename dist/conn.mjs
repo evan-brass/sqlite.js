@@ -80,6 +80,8 @@ class Bindings {
 }
 
 export class Conn {
+	// inits are functions which are called on each opened (or reopened) conn
+	static inits = [];
 	ptr = 0;
 	// Lifecycle
 	async open(params = new OpenParams()) {
@@ -99,6 +101,10 @@ export class Conn {
 
 		if (this.ptr) this.close();
 		this.ptr = conn;
+
+		for (const init of this.constructor.inits) {
+			init(this);
+		}
 	}
 	async *backup(dest, { src_db = 'main', dest_db = 'main', pages_per = 5 } = {}) {
 		let dconn;

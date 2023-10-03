@@ -1,5 +1,5 @@
 import { Conn, OpenParams } from './conn.mjs';
-import { sqlite3 } from './sqlite.mjs';
+import { default as sqlite_initialized, sqlite3 } from './sqlite.mjs';
 import { leaky, handle_error } from "./memory.mjs";
 
 export class ConnPool {
@@ -52,6 +52,10 @@ export class ConnPool {
 	}
 	async make_conn() {
 		this.#conn_count += 1;
+		if (typeof this.options.initialized == 'function') {
+			await sqlite_initialized;
+			this.options.initialized = this.options.initialized();
+		}
 		await this.options.initialized;
 		const ret = new Conn();
 		await ret.open(this.#open);

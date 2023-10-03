@@ -1,8 +1,8 @@
-import './func.mjs';
-import { Pointer, Bindable } from "./value.mjs";
-import { Conn } from "./conn.mjs";
-import { mem8, memdv, sqlite3 } from "./sqlite.mjs";
-import { borrow_mem, handle_error } from "./memory.mjs";
+import './basics.mjs';
+import { Pointer, Bindable } from "../value.mjs";
+import { Conn } from "../conn.mjs";
+import { mem8, memdv, sqlite3 } from "../sqlite.mjs";
+import { borrow_mem, handle_error } from "../memory.mjs";
 
 // We make ReadableStream / WritableStream Bindable by wrapping them in a StreamHandle which is a subclass of Pointer
 class StreamHandle extends Pointer {
@@ -20,15 +20,12 @@ Object.assign(WritableStream.prototype, {
 	}
 });
 
-// Each connection will need to have incremental blob io re-registered
-Object.assign(Conn.prototype, {
-	enable_blob_io() {
-		this.create_scalarf(blob_io, {n_args: blob_io.length});
-		this.create_scalarf(blob_io, {n_args: blob_io.length + 1});
-		this.create_scalarf(blob_io, {n_args: blob_io.length + 2});
-		this.create_scalarf(blob_io, {n_args: blob_io.length + 3});
-		this.create_scalarf(blob_io, {n_args: blob_io.length + 4});
-	}
+Conn.inits.push(function define_blob_io(conn) {
+	conn.create_scalarf(blob_io, {n_args: blob_io.length});
+	conn.create_scalarf(blob_io, {n_args: blob_io.length + 1});
+	conn.create_scalarf(blob_io, {n_args: blob_io.length + 2});
+	conn.create_scalarf(blob_io, {n_args: blob_io.length + 3});
+	conn.create_scalarf(blob_io, {n_args: blob_io.length + 4});
 });
 
 function blob_io(stream_handle, rowid, table_name, column_name, db_name = 'main', offset = 0, length = -1, buffer_size = 2048) {

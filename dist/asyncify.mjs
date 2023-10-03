@@ -59,7 +59,7 @@ export default async function asyncify(module, imports, {stack_size = 1024} = {}
 		}
 		if (state == State.Unwinding) throw new Error("Corruption!");
 
-		let result = imports[module][name](...args);
+		const result = imports[module][name](...args);
 		if (is_promise(result)) {
 			value = result;
 			stack = get_stack();
