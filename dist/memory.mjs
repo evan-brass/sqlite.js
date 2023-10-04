@@ -1,4 +1,4 @@
-import { sqlite3, mem8, imports } from "./sqlite.mjs";
+import { default as sqlite_initialized, sqlite3, mem8, imports } from "./sqlite.mjs";
 import { OutOfMemError, is_promise } from "sql.mjs/util.mjs";
 import { SQLITE_OK, SQLITE_ROW, SQLITE_DONE } from "./sqlite_def.mjs";
 
@@ -49,12 +49,19 @@ export class Span {
 }
 
 const leaked = new Map();
-
 const null_span = new Span(0, 0);
 
-export function leaky(v) {
-	if (v === '') return null_span;
+// Pre-leak a few useful strings:
+leaked.set('\0', null_span);
+sqlite_initialized.then(() => {
+	leaky('main');
+	leaky('js');
+	leaky('ROLLBACK;');
+	leaky(':memory:');
+	leaky('blob_io');
+});
 
+export function leaky(v) {
 	if (typeof v == 'string' && !v.endsWith('\0')) {
 		v += '\0';
 	}
@@ -92,17 +99,26 @@ export function borrow_mem(args, func) {
 	const inits = []; // The values to set at the memory locations (Uint8Arrays)
 	for (const i in args) {
 		const arg = args[i];
-		if (arg === '') {
-			mapped[i] = null_span;
+		if (arg instanceof Span) {
+			// Don't allocate for things that have already been allocated:
+			mapped[i] = arg;
 		}
-		else if (typeof arg == 'number') {
+		else if (typeof arg == 'number' && arg > 0) {
 			sizes[i] = arg;
 		}
 		else if (typeof arg == 'string') {
 			const terminated = arg.endsWith('\0') ? arg : arg + '\0';
-			const encoded = encoder.encode(terminated);
-			inits[i] = encoded;
-			sizes[i] = encoded.byteLength;
+			if (leaked.has(terminated)) {
+				// Re-use leaked strings:
+				mapped[i] = leaked.get(terminated);
+			} else {
+				const encoded = encoder.encode(terminated);
+				inits[i] = encoded;
+				sizes[i] = encoded.byteLength;
+			}
+		}
+		else if (arg?.byteLength === 0) {
+			mapped[i] = null_span;
 		}
 		else if (ArrayBuffer.isView(arg)) {
 			inits[i] = new Uint8Array(arg.buffer, arg.byteOffset, arg.byteLength);
@@ -125,6 +141,11 @@ export function borrow_mem(args, func) {
 		while (alloc_size % 4) alloc_size += 1;
 		ptrs[i] = alloc_size;
 		alloc_size += sizes[i];
+	}
+
+	// Bypass allocation if the allocation size is 0 (Everything must already have an entry in mapped)
+	if (alloc_size === 0) {
+		return func(...mapped);
 	}
 
 	// Allocate the memory
