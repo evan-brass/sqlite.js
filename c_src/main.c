@@ -36,25 +36,19 @@ __attribute__((visibility("default"))) void* release_ptr() {
 }
 
 static sqlite3_io_methods IoMethods = {
-	1,
-	js_xClose,
-	js_xRead,
-	js_xWrite,
-	js_xTruncate,
-	js_xSync,
-	js_xFileSize,
-	js_xLock,
-	js_xUnlock,
-	js_xCheckReservedLock,
-	js_xFileControl,
-	js_xSectorSize,
-	js_xDeviceCharacteristics,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL
+	.iVersion = 1,
+	.xClose = js_xClose,
+	.xRead = js_xRead,
+	.xWrite = js_xWrite,
+	.xTruncate = js_xTruncate,
+	.xSync = js_xSync,
+	.xFileSize = js_xFileSize,
+	.xLock = js_xLock,
+	.xUnlock = js_xUnlock,
+	.xCheckReservedLock = js_xCheckReservedLock,
+	.xFileControl = js_xFileControl,
+	.xSectorSize = js_xSectorSize,
+	.xDeviceCharacteristics = js_xDeviceCharacteristics
 };
 
 // The only thing we do is set the io_methods for the file_out
@@ -63,29 +57,30 @@ int xOpen(sqlite3_vfs* vfs, const char* filename, sqlite3_file* file_out, int fl
 	return js_xOpen(vfs, filename, file_out, flags, flags_out);
 }
 
+// The sqlite3_vfs is always the same except for [mxPathname, zName, and pNext]
+static sqlite3_vfs base_vfs = {
+	.iVersion = 2,
+	.szOsFile = sizeof(sqlite3_file),
+	.mxPathname = 128,
+	.zName = "mem",
+	.xOpen = xOpen,
+	.xDelete = js_xDelete,
+	.xAccess = js_xAccess,
+	.xFullPathname = js_xFullPathname,
+	.xRandomness = js_xRandomness,
+	.xSleep = js_xSleep,
+	.xGetLastError = js_xGetLastError,
+	.xCurrentTimeInt64 = js_xCurrentTimeInt64
+};
+
 __attribute__((visibility("default"))) sqlite3_vfs* allocate_vfs(const char* zName, int mxPathname) {
 	sqlite3_vfs* ret = malloc(sizeof(sqlite3_vfs));
 	if (ret == NULL) { return ret; }
-
-	ret->iVersion = 2;
-	ret->szOsFile = sizeof(sqlite3_file);
+	memcpy(ret, &base_vfs, sizeof(sqlite3_vfs));
+	
 	ret->mxPathname = mxPathname;
 	ret->pNext = NULL;
 	ret->zName = zName;
-	ret->pAppData = NULL;
-	ret->xOpen = xOpen;
-	ret->xDelete = js_xDelete;
-	ret->xAccess = js_xAccess;
-	ret->xFullPathname = js_xFullPathname;
-	ret->xDlOpen = NULL;
-	ret->xDlError = NULL;
-	ret->xDlSym = NULL;
-	ret->xDlClose = NULL;
-	ret->xRandomness = js_xRandomness;
-	ret->xSleep = js_xSleep;
-	ret->xCurrentTime = NULL;
-	ret->xGetLastError = js_xGetLastError;
-	ret->xCurrentTimeInt64 = js_xCurrentTimeInt64;
 
 	return ret;
 }
@@ -105,8 +100,7 @@ __attribute__((visibility("default"))) int create_scalar_function(sqlite3* db, c
 }
 
 int sqlite3_os_init() {
-	sqlite3_vfs* mem_vfs = allocate_vfs("mem", 16);
-	return sqlite3_vfs_register(mem_vfs, 1);
+	return sqlite3_vfs_register(&base_vfs, 1);
 }
 int sqlite3_os_end() {
 	return SQLITE_OK;
