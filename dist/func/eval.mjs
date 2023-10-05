@@ -7,5 +7,5 @@ function js_eval(js, ...args) {
 }
 
 Conn.inits.push(function define_eval(conn) {
-	conn.create_scalarf(js_eval, {n_args: -1});
+	conn.create_scalarf(js_eval, {n_args: -1, func_name: 'eval'});
 });
