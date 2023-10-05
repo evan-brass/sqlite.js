@@ -151,7 +151,7 @@ export class Conn {
 	// Meta
 	filename(db_name = 'main') {
 		if (!this.ptr) return;
-		borrow_mem(db_name, db_name => {
+		return borrow_mem([db_name], db_name => {
 			const filename_ptr = sqlite3.sqlite3_db_filename(this.ptr, db_name);
 			return str_read(filename_ptr) || ':memory:';
 		});
