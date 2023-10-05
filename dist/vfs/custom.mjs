@@ -12,7 +12,7 @@ import {
 } from "../sqlite.mjs";
 import {
 	SQLITE_OK, SQLITE_BUSY,
-	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READONLY, SQLITE_OPEN_READWRITE,
+	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ,
 	SQLITE_FCNTL_VFS_POINTER, SQLITE_FCNTL_FILE_POINTER,
 } from "../sqlite_def.mjs";
 import { Conn } from "../conn.mjs";
@@ -98,47 +98,34 @@ class Filename {
 	}
 }
 
-function vfs_wrapper(inner) {
-	return async function (vfs_ptr, ...args) {
-		const entry = vfs_impls.get(vfs_ptr);
-		if (!entry) throw new Error('vfs implementation not found... was it registered using register_vfs?');
-		const { vfs, errors } = entry;
+function vfs_boiler(vfs_ptr, method_name, args = [], success = () => SQLITE_OK, error = () => SQLITE_IOERR) {
+	const {vfs, errors} = vfs_impls.get(vfs_ptr) ?? {};
+	if (!vfs) return error();
 
-		try {
-			return await inner({vfs, errors, vfs_ptr}, ...args);
-		} catch (e) {
-			errors.push(e);
-			console.error(e);
-			return SQLITE_IOERR;
-		}
-	}
-}
-function file_wrapper(inner) {
-	return async function (file_ptr, ...args) {
-		const entry = file_impls.get(file_ptr);
-		if (!entry) throw new Error('file implementation not found... this is pretty weird, did you mannually call sqlite3_open?  Could also be a problem in the cleanup for closed files.');
-		const { file, errors } = entry;
-
-		try {
-			return await inner({file, errors, file_ptr}, ...args);
-		} catch (e) {
-			errors.push(e);
-			console.error(e);
-			return SQLITE_IOERR;
-		}
-	}
-}
-
-//
-function maybe_async(f, success = () => SQLITE_OK, fail = () => SQLITE_IOERR) {
+	const err = e => (errors.push(e), error());
+	const suc = res => success(res, {vfs, errors});
+	
 	try {
-		const ret = f();
-		if (is_promise(ret)) {
-			return ret.then(success, fail);
-		}
-		return success(ret);
+		const ret = vfs[method_name](...args);
+		if (is_promise(ret)) return ret.then(suc, err);
+		return suc(ret);
 	} catch (e) {
-		return fail(e);
+		err(e);
+	}
+}
+function file_boiler(file_ptr, method_name, args = [], success = () => SQLITE_OK, error = () => SQLITE_IOERR) {
+	const {file, errors} = file_impls.get(file_ptr) ?? {};
+	if (!file) return error();
+
+	const err = e => (errors.push(e), error());
+	const suc = res => success(res, {file, errors});
+
+	try {
+		const ret = file[method_name](...args);
+		if (is_promise(ret)) return ret.then(suc, err);
+		return suc(ret);
+	} catch (e) {
+		err(e);
 	}
 }
 
@@ -146,58 +133,29 @@ imports['vfs'] ??= {};
 Object.assign(imports['vfs'], {
 	// sqlite3_vfs methods:
 	xOpen(vfs_ptr, filename_ptr, file_out, flags, flags_out) {
-		// In the event of a failure, we clear .pMethods of the file_out so that SQLite doesn't call close on it.
-		const clear_pMethods = () => memdv().setInt32(file_out, 0, true);
-		
-		const {vfs, errors} = vfs_impls.get(vfs_ptr) ?? {};
-		if (!vfs) {
-			// If we don't have an entry for the vfs in our vfs_impls then it wasn't registered with register_vfs: it is either the in-memory vfs that gets registered during sqlite_os_init or someone tried to sqlite_vfs_register on their own.  Either way, we error:
-			clear_pMethods();
-			return SQLITE_IOERR;
-		}
-
-		const filter = SQLITE_OPEN_EXRESCODE | (vfs.flags_filter ?? (SQLITE_OPEN_READONLY | SQLITE_OPEN_READWRITE));
-		const success = file => {
-			memdv().setInt32(flags_out, file.flags ?? 0, true);
+		return vfs_boiler(vfs_ptr, 'open', [new Filename(filename_ptr), flags], (file, {errors}) => {
 			file_impls.set(file_out, {file, errors});
+			memdv().setInt32(flags_out, file.flags, true);
 			return SQLITE_OK;
-		};
-		const fail = error => {
-			errors.push(error);
-			clear_pMethods();
-			return SQLITE_IOERR;
-		};
-		return maybe_async(() => vfs.open(new Filename(filename_ptr), flags & filter), success, fail);
-	},
-	xDelete(vfs_ptr, filename_ptr, sync) {
-		const {vfs, errors} = vfs_impls.get(vfs_ptr) ?? {};
-		if (!vfs) return SQLITE_IOERR;
-		return maybe_async(() => vfs.delete(new Filename(filename_ptr), sync), () => SQLITE_OK, e => {
-			errors.push(e);
+		}, () => {
+			memdv().setInt32(file_out, 0, true);
 			return SQLITE_IOERR;
 		});
 	},
+	xDelete(vfs_ptr, filename_ptr, sync) {
+		return vfs_boiler(vfs_ptr, 'delete', [new Filename(filename_ptr), sync]);
+	},
 	xAccess(vfs_ptr, filename_ptr, flags, result_ptr) {
-		const {vfs, errors} = vfs_impls.get(vfs_ptr) ?? {};
-		if (!vfs) return SQLITE_IOERR;
-		return maybe_async(() => vfs.access(new Filename(filename_ptr), flags), res => {
+		return vfs_boiler(vfs_ptr, 'access', [new Filename(filename_ptr), flags], res => {
 			memdv().setInt32(result_ptr, Number(res), true);
 			return SQLITE_OK;
-		}, e => {
-			errors.push(e);
-			return SQLITE_IOERR;
 		});
 	},
 	xFullPathname(vfs_ptr, filename_ptr, buff_len, buff_ptr) {
-		const {vfs, errors} = vfs_impls.get(vfs_ptr) ?? {};
-		if (!vfs) return SQLITE_IOERR;
-		maybe_async(() => vfs.full_pathname(str_read(filename_ptr)), full => {
+		return vfs_boiler(vfs_ptr, 'full_pathname', [str_read(filename_ptr)], full => {
 			if (!full.endsWith('\0')) full += '\0';
 			encoder.encodeInto(full, mem8(buff_ptr, buff_len));
 			return SQLITE_OK;
-		}, e => {
-			errors.push(e);
-			return SQLITE_IOERR;
 		});
 	},
 	xGetLastError(vfs_ptr, buff_len, buff_ptr) {
@@ -208,101 +166,53 @@ Object.assign(imports['vfs'], {
 	},
 	// sqlite3_io_methods methods:
 	xClose(file_ptr) {
-		const {file, errors} = file_impls.get(file_ptr) ?? {};
-		if (!file) return SQLITE_IOERR;
-		file_impls.delete(file_ptr);
-		maybe_async(() => file.close(), () => {
+		return file_boiler(file_ptr, 'close', [], () => {
+			file_impls.delete(file_ptr);
 			return SQLITE_OK;
-		}, e => {
-			errors.push(e);
+		}, () => {
+			file_impls.delete(file_ptr);
 			return SQLITE_IOERR;
 		});
 	},
 	xRead(file_ptr, buff_ptr, buff_len, offset) {
-		const {file, errors} = file_impls.get(file_ptr) ?? {};
-		if (!file) return SQLITE_IOERR;
-		maybe_async(() => file.read(offset, buff_len), read => {
+		return file_boiler(file_ptr, 'read', [offset, buff_len], read => {
 			mem8(buff_ptr, buff_len).set(read);
 			if (read.byteLength < buff_len) {
-				// Zero out the end of the buffer:
 				mem8(buff_ptr + read.byteLength, buff_len - read.byteLength).fill(0);
 				return SQLITE_IOERR_SHORT_READ;
 			}
 			return SQLITE_OK;
-		}, e => {
-			errors.push(e);
-			return SQLITE_IOERR;
 		});
 	},
 	xWrite(file_ptr, buff_ptr, buff_len, offset) {
-		const {file, errors} = file_impls.get(file_ptr) ?? {};
-		if (!file) return SQLITE_IOERR;
-		maybe_async(() => file.write(mem8(buff_ptr, buff_len), offset), () => SQLITE_OK, e => {
-			errors.push(e);
-			return SQLITE_IOERR;
-		});
+		return file_boiler(file_ptr, 'write', [mem8(buff_ptr, buff_len), offset]);
 	},
 	xTruncate(file_ptr, size) {
-		const {file, errors} = file_impls.get(file_ptr) ?? {};
-		if (!file) return SQLITE_IOERR;
-		maybe_async(() => file.trunc(size), () => SQLITE_OK, e => {
-			errors.push(e);
-			return SQLITE_IOERR;
-		});
+		return file_boiler(file_ptr, 'trunc', [size]);
 	},
 	xSync(file_ptr, flags) {
-		const {file, errors} = file_impls.get(file_ptr) ?? {};
-		if (!file) return SQLITE_IOERR;
-		maybe_async(() => file.sync(flags), () => SQLITE_OK, e => {
-			errors.push(e);
-			return SQLITE_IOERR;
-		});
+		return file_boiler(file_ptr, 'sync', [flags]);
 	},
 	xFileSize(file_ptr, size_ptr) {
-		const {file, errors} = file_impls.get(file_ptr) ?? {};
-		if (!file) return SQLITE_IOERR;
-		maybe_async(() => file.size(), size => {
+		return file_boiler(file_ptr, 'size', [], size => {
 			memdv().setBigInt64(size_ptr, BigInt(size), true);
 			return SQLITE_OK;
-		}, e => {
-			errors.push(e);
-			return SQLITE_IOERR;
 		});
 	},
 	xLock(file_ptr, lock_level) {
-		const {file, errors} = file_impls.get(file_ptr) ?? {};
-		if (!file) return SQLITE_IOERR;
-		maybe_async(() => file.lock(lock_level), () => SQLITE_OK, e => {
-			errors.push(e);
-			return SQLITE_IOERR;
-		});
+		return file_boiler(file_ptr, 'lock', [lock_level], res => res ? SQLITE_OK : SQLITE_BUSY);
 	},
 	xUnlock(file_ptr, lock_level) {
-		const {file, errors} = file_impls.get(file_ptr) ?? {};
-		if (!file) return SQLITE_IOERR;
-		maybe_async(() => file.unlock(lock_level), () => SQLITE_OK, e => {
-			errors.push(e);
-			return SQLITE_IOERR;
-		});
+		return file_boiler(file_ptr, 'unlock', [lock_level]);
 	},
 	xCheckReservedLock(file_ptr, res_ptr) {
-		const {file, errors} = file_impls.get(file_ptr) ?? {};
-		if (!file) return SQLITE_IOERR;
-		maybe_async(() => file.check_reserved_lock(), res => {
+		return file_boiler(file_ptr, 'check_reserved_lock', [], res => {
 			memdv().setInt32(res_ptr, Number(res), true);
 			return SQLITE_OK;
-		}, e => {
-			errors.push(e);
-			return SQLITE_IOERR;
 		});
 	},
 	xFileControl(file_ptr, op, arg) {
-		const {file, errors} = file_impls.get(file_ptr) ?? {};
-		if (!file) return SQLITE_IOERR;
-		maybe_async(() => file.file_control(op, arg), () => SQLITE_OK, e => {
-			errors.push(e);
-			return SQLITE_IOERR;
-		});
+		return file_boiler(file_ptr, 'file_control', [op, arg], res => res);
 	},
 	xSectorSize(file_ptr) {
 		const {file} = file_impls.get(file_ptr) ?? {};
