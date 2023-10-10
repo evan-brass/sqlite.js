@@ -53,13 +53,21 @@ const null_span = new Span(0, 0);
 
 // Pre-leak a few useful strings:
 leaked.set('\0', null_span);
-sqlite_initialized.then(() => {
-	leaky('main');
-	leaky('js');
-	leaky('ROLLBACK;');
-	leaky(':memory:');
-	leaky('blob_io');
-});
+const statics = [
+	'main',
+	'local',
+	'js',
+	'ROLLBACK;',
+	':memory:',
+	'blob_io'
+];
+sqlite_initialized.then(() => borrow_mem(statics, (...spans) => {
+	for (let i = 0; i < statics.length; ++i) {
+		leaked.set(statics[i] + '\0', spans[i]);
+	}
+	// Never release the memory:
+	return new Promise(() => {});
+}));
 
 export function leaky(v) {
 	if (typeof v == 'string' && !v.endsWith('\0')) {
