@@ -5,19 +5,16 @@ import {
 	SQLITE_OPEN_URI, SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
 
 } from "./sqlite_def.mjs";
-import { Bindable, value_to_js } from './value.mjs';
+import { Bindable, Pointer, value_to_js } from './value.mjs';
 import { borrow_mem, str_read, handle_error } from "./memory.mjs";
 
 export const SqlCommand = new Trait("This trait marks special commands which can be used inside template literals tagged with the Conn.sql tag.");
 
-export class OpenParams {
+export class OpenParams extends Pointer {
 	pathname = ":memory:";
 	flags = SQLITE_OPEN_URI | SQLITE_OPEN_CREATE | SQLITE_OPEN_EXRESCODE | SQLITE_OPEN_READWRITE
 	vfs = "";
-	constructor() { Object.assign(this, ...arguments); }
-	async [SqlCommand](conn) {
-		await conn.open(this);
-	}
+	constructor() { super(); Object.assign(this, ...arguments); }
 }
 
 function is_anon_arg(val) {

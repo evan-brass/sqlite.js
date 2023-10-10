@@ -102,7 +102,11 @@
 						ret.vfs = arg;
 					}
 				}
-				return ret;
+				return {
+					async [SqlCommand](conn) {
+						await conn.open(ret);
+					}
+				};
 			}
 
 			const conn = new Conn();
