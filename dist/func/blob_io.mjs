@@ -5,18 +5,19 @@ import { mem8, memdv, sqlite3 } from "../sqlite.mjs";
 import { borrow_mem, handle_error } from "../memory.mjs";
 
 // We make ReadableStream / WritableStream Bindable by wrapping them in a StreamHandle which is a subclass of Pointer
-class StreamHandle extends Pointer {
+export class StreamHandle extends Pointer {
 	stream;
-	constructor(stream) { super(); this.stream = stream; }
+	buffer_size = 4096;
+	constructor(...args) { super(); Object.assign(this, ...args); }
 }
 Object.assign(ReadableStream.prototype, {
 	[Bindable](...args) {
-		return new StreamHandle(this)[Bindable](...args);
+		return new StreamHandle({stream: this})[Bindable](...args);
 	}
 });
 Object.assign(WritableStream.prototype, {
 	[Bindable](...args) {
-		return new StreamHandle(this)[Bindable](...args);
+		return new StreamHandle({stream: this})[Bindable](...args);
 	}
 });
 
@@ -25,10 +26,9 @@ Conn.inits.push(function define_blob_io(conn) {
 	conn.create_scalarf(blob_io, {n_args: blob_io.length + 1});
 	conn.create_scalarf(blob_io, {n_args: blob_io.length + 2});
 	conn.create_scalarf(blob_io, {n_args: blob_io.length + 3});
-	conn.create_scalarf(blob_io, {n_args: blob_io.length + 4});
 });
 
-function blob_io(stream_handle, rowid, table_name, column_name, db_name = 'main', offset = 0, length = -1, buffer_size = 2048) {
+function blob_io(stream_handle, rowid, table_name, column_name, db_name = 'main', offset = 0, length = -1) {
 	if (!(stream_handle instanceof StreamHandle)) throw new Error("First argument must be a StreamHandle.");
 
 	if ([typeof table_name, typeof column_name, typeof db_name].some(typ => typ !== 'string')) {
@@ -36,7 +36,7 @@ function blob_io(stream_handle, rowid, table_name, column_name, db_name = 'main'
 	}
 
 	return borrow_mem(
-		[4, Number(buffer_size), table_name, column_name, db_name],
+		[4, Number(stream_handle.buffer_size), table_name, column_name, db_name],
 		async (handle_ptr, buffer, table_name, column_name, db_name) => {
 			// We read the ReadableStream, but *write* the data to the Blob (hence writable access)
 			// When we have a WritableStream then we *read* from the blob and write to the stream (readonly access).
