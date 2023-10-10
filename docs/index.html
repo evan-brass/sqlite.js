@@ -54,13 +54,14 @@
 			<pre><output id="result"></output></pre>
 		</section>
 		<script type="importmap">{ "imports": {
-			"sql.mjs": "https://unpkg.com/sql.mjs@0.14.2"
+			"sql.mjs": "/dist/index.mjs",
+			"sql.mjs/": "/dist/"
 		}}</script>
 		<script type="module">
 			import {
-				Conn, OpenParams, SqlCommand, sqlite_def
+				sqlite_initialized, Conn, OpenParams, SqlCommand, register_vfs
 			} from 'sql.mjs';
-			const {
+			import {
 				SQLITE_OPEN_READONLY,
 				SQLITE_OPEN_READWRITE,
 				SQLITE_OPEN_CREATE,
@@ -72,17 +73,19 @@
 				SQLITE_OPEN_PRIVATECACHE,
 				SQLITE_OPEN_NOFOLLOW,
 				SQLITE_OPEN_EXRESCODE,
-			} = sqlite_def;
+			} from 'sql.mjs/sqlite_def.mjs';
+			import 'sql.mjs/func/eval.mjs';
+			import http from 'sql.mjs/vfs/http.mjs';
+			import local from 'sql.mjs/vfs/local.mjs';
 
-			export function backup(dest, props) {
-				return {
-					async [SqlCommand](src) {
-						for await (const {remaining, count} of src.backup(dest, props)) {
-							console.log('backup', remaining, '/', count);
-						}
-					}
-				};
-			}
+			await sqlite_initialized;
+			register_vfs(local, 1);
+			register_vfs(http);
+
+			// Mount the Origin Private File System folder into the local database:
+			const opfs_root = await navigator.storage.getDirectory();
+			await local.mount(opfs_root, '/opfs');
+
 			// This function doesn't actually open a database, it just fills out an OpenParams object from a template
 			export function open(strings, ...args) {
 				let seen_int = false;
@@ -157,6 +160,19 @@
 			});
 		</script>
 
+		<h2>Temp</h2>
+		<p><code>${open`file:/opfs/test.db`}</code></p>
+		<p><code>${open`file:test.db?vfs=opfs`}</code></p>
+		<p><code>${open`file:test.db?vfs=http`}</code></p>
+		<p><code>SELECT eval('this.db') AS db_ptr;</code></p>
+		<p><code>SELECT eval('new Date(args[0]).toLocaleDateString()', date()) AS formatted;</code></p>
+		<p><pre><code>SELECT eval('new Date(args[0]).toLocaleDateString("en", {
+	day: "numeric",
+	month: "long",
+	weekday: "long",
+	year: "numeric"
+})', date()) AS formatted;</code></pre></p>
+
 		<h2>Examples</h2>
 		<p>A few things you could try playing around with are: (click the code samples)</p>
 		<ul>
@@ -197,7 +213,7 @@
 		<p><del>Notice that the picker VFS converts your open:/save: filename into a "filehandle:[number] - [filename]".  You can use "filehandle:[number]" to reopen a database that was previously openned using either the open or save file pickers (This currently only works in Chrome).  The picker VFS stores file handles into an IndexedDB database.  Currently there's no way to list / manage that database but there will likely be ways of doing that in the future.</del><ins>Edit: Actually I don't like how this worked, I'll add something to support reopenning previously picked files later.</ins></p>
 		<h3>Open Databases Over HTTP(S)</h3>
 		<ul>
-			<li><code>${open`file://cdn.jsdelivr.net/gh/alex-hofsteede/zipcode_db/zipcodes.sqlite?vfs=http&https=on`}</code></li>
+			<li><code>${open`file://cdn.jsdelivr.net/gh/alex-hofsteede/zipcode_db/zipcodes.sqlite?vfs=http`}</code></li>
 			<li>Example of opening an empty file as a sqlite database <code>${open`empty.db${'http'}`}</code></li>
 			<li>Example of opening a relative file using a uri <strong>Note:</strong> localhost here is being used to mean "relative to the current website's origin".<code>${open`file://localhost/docs/test.db?vfs=http`}</code></li>
 			<li>Example of loading a file from the user's local computer: <code>${open`file://localhost:80/docs/test.db?vfs=http`}</code></li>
@@ -209,9 +225,6 @@ WHERE state_id = (SELECT id FROM states WHERE name = 'OR');</code></pre>
 		<p>This is a pretty long operation because (with this database's indexes) this requires a full table scan.  The HTTP VFS uses the Range header to do partial reads.  This database uses a 4.5kb page size, but a larger page size would probably be better.</p>
 		<p>The HTTP VFS doesn't support writable files.  The HTTP VFS tells sqlite that the file is immutable, meaning that bad things will happen if you modify the file while someone is reading it.  Luckily, the HTTP VFS performs a first HEAD request and follows redirects.  Subsequent reads will use the redirected URL so you can upgrade a database by uploading a new copy of the database and then migrating the redirect to the new file.</p>
 		<p>Modifying a file while there is a reader should result in an IO error if your server supports etags or last-modified.  The exception to this is for empty databases files, which are never fetched again after the initial HEAD request.</p>
-		
-		<h2>Online Backup</h2>
-		<p>SQLite has a backup API which operates a few pages at a time to prevent blocking writers on the source database.  If you've been working in an in-memory database, then you can download a copy of your database using: <code>${backup(open`file://localhost/name?vfs=picker&save=true`)}</code></p>
 
 		<h2>Possible Use-Cases</h2>
 		<ul>
