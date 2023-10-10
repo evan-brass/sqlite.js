@@ -1,5 +1,8 @@
 import { OutOfMemError, is_promise } from "./util.mjs";
 
+// Useful tracing for finding / minimizing unneccessary async which produces unwinding / rewinding
+const dbg_tracing = false;
+
 let value, stack;
 const State = {
 	None: 0,
@@ -39,6 +42,7 @@ export default async function asyncify(module, imports, {stack_size = 1024} = {}
 
 		const ptr = exports.malloc(stack_size);
 		if (!ptr) throw new OutOfMemError();
+		if (dbg_tracing) console.log('asyncify.mjs: allocated a stack');
 		
 		const dv = new DataView(exports.memory.buffer ?? imports?.env?.memory?.buffer);
 		dv.setInt32(ptr, ptr + 8, true);
@@ -50,11 +54,13 @@ export default async function asyncify(module, imports, {stack_size = 1024} = {}
 	// Import and Export stubs:
 	function import_stub(module, name, ...args) {
 		const state = exports.asyncify_get_state();
+		if (dbg_tracing && state != State.Rewinding) console.log('asyncify.mjs: import', name, '<-', ...args);
 		if (state == State.Rewinding) {
 			exports.asyncify_stop_rewind();
 			stacks.push(stack);
 			const ret = value;
 			value = stack = undefined;
+			if (dbg_tracing) console.log('asyncify.mjs: import', name, '->', ret);
 			return ret;
 		}
 		if (state == State.Unwinding) throw new Error("Corruption!");
@@ -63,13 +69,16 @@ export default async function asyncify(module, imports, {stack_size = 1024} = {}
 		if (is_promise(result)) {
 			value = result;
 			stack = get_stack();
+			if (dbg_tracing) console.log('asyncify.mjs: unwind');
 			exports.asyncify_start_unwind(stack);
 			return;
 		}
+		if (dbg_tracing) console.log('asyncify.mjs: import', name, '->', result);
 		return result;
 	}
 	// Unlike https://github.com/GoogleChromeLabs/asyncify, this export stub only returns a promise if we encounter unwinding.
 	function export_stub(name, ...args) {
+		if (dbg_tracing) console.log('asyncify.mjs: export', name, '<-', ...args);
 		let result = exports[name](...args);
 		if (exports.asyncify_get_state() == State.Unwinding) {
 			return (async () => {
@@ -80,13 +89,16 @@ export default async function asyncify(module, imports, {stack_size = 1024} = {}
 					value = stack = undefined;
 					value = await prom;
 					stack = save_stack;
+					if (dbg_tracing) console.log('asyncify.mjs: rewind');
 					exports.asyncify_start_rewind(save_stack);
 					result = exports[name](...args);
 				} while (exports.asyncify_get_state() == State.Unwinding);
 
+				if (dbg_tracing) console.log('asyncify.mjs: export', name, '->', result);
 				return result;
 			})();
 		}
+		if (dbg_tracing) console.log('asyncify.mjs: export', name, '->', result);
 		return result;
 	}
 
