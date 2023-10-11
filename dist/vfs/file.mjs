@@ -24,9 +24,13 @@ export class File {
 	#res_lock;
 	#writable_stream;
 	sector_size = 0;
-	constructor(handle, flags) {
+	#lock_name;
+	#lock_name_res;
+	constructor(pathname, handle, flags) {
 		this.#handle = handle;
 		this.flags = flags;
+		this.#lock_name = pathname;
+		this.#lock_name_res = this.#lock_name + '-r';
 	}
 	get handle() {
 		return this.#handle;
@@ -34,29 +38,24 @@ export class File {
 
 	// Other:
 	device_characteristics() {
+		// TODO: If createSyncAccessHandle, then no batch atomics.
 		return SQLITE_IOCAP_ATOMIC | SQLITE_IOCAP_BATCH_ATOMIC;
 	}
 	// Locking:
-	get lock_name() {
-		return `opfs.mjs:${this.#handle.name}`;
-	}
-	get lock_name_res() {
-		return this.lock_name + '-r';
-	}
 	async lock(level) {
 		if (level >= 1 && !this.#lock) {
 			// Aquire a shared lock on lock_name
-			this.#lock = await get_lock(this.lock_name, {mode: 'shared', ifAvailable: true});
+			this.#lock = await get_lock(this.#lock_name, {mode: 'shared', ifAvailable: true});
 			if (!this.#lock) return false;
 		}
 		if (level >= 2 && !this.#res_lock) {
 			// Aquire an exclusive lock on lock_name_res or return BUSY if it isn't available.
-			this.#res_lock = await get_lock(this.lock_name_res, {mode: 'exclusive', ifAvailable: true});
+			this.#res_lock = await get_lock(this.#lock_name_res, {mode: 'exclusive', ifAvailable: true});
 			if (!this.#res_lock) return false;
 		}
 		if (level >= 3 && !this.#lock.mode == 'shared') {
 			// Exchange our shared lock on lock_name for an exclusive lock on lock_name
-			const new_lock_prom = get_lock(this.lock_name);
+			const new_lock_prom = get_lock(this.#lock_name);
 			this.#lock.release();
 			this.#lock = await new_lock_prom;
 		}
@@ -67,7 +66,7 @@ export class File {
 	async unlock(level) {
 		if (level <= 1 && this.#lock?.mode == 'exclusive') {
 			this.#lock.release();
-			this.#lock = await get_lock(this.lock_name, {mode: 'shared'});
+			this.#lock = await get_lock(this.#lock_name, {mode: 'shared'});
 			this.#res_lock.release();
 			this.#res_lock = null;
 		}
@@ -77,7 +76,7 @@ export class File {
 		}
 	}
 	async check_reserved_lock() {
-		const res = await get_lock(this.lock_name_res, {mode: 'shared', ifAvailable: true});
+		const res = await get_lock(this.#lock_name_res, {mode: 'shared', ifAvailable: true});
 		if (res) {
 			res.release();
 		}
@@ -89,7 +88,7 @@ export class File {
 			await this.#handle.remove();
 		}
 	}
-	async sync() {
+	sync() {
 		if (this.#writable_stream) throw new Error('wat?');
 	}
 	async read(offset, len) {
