@@ -26,10 +26,10 @@ export class File {
 	sector_size = 0;
 	#lock_name;
 	#lock_name_res;
-	constructor(pathname, handle, flags) {
+	constructor(handle, flags, lock_name = handle.name) {
 		this.#handle = handle;
 		this.flags = flags;
-		this.#lock_name = pathname;
+		this.#lock_name = lock_name;
 		this.#lock_name_res = this.#lock_name + '-r';
 	}
 	get handle() {
