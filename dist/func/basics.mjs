@@ -30,9 +30,11 @@ class FuncCtx {
 	ctx_ptr;
 	num_args;
 	args_ptr;
+	#db;
 	constructor() { Object.assign(this, ...arguments); }
 	get db() {
-		return sqlite3.sqlite3_context_db_handle(this.ctx_ptr);
+		this.#db ??= sqlite3.sqlite3_context_db_handle(this.ctx_ptr);
+		return this.#db;
 	}
 	value_ptr(i) {
 		if (i >= this.num_args) return;
