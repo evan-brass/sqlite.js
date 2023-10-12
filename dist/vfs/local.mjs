@@ -25,11 +25,11 @@ export class Local {
 	constructor(idb_name = 'sql.mjs') {
 		this.#db = new Promise((res, rej) => {
 			on(indexedDB.open(idb_name, 1), {
-				upgradeneeded({ target: { result: db }, oldVersion, newVersion, }) {
+				upgradeneeded({ target: { result: db } }) {
 					db.createObjectStore('handles');
 				},
-				success({ target: { result }}) { res(result); },
-				error({ target: { error }}) { rej(error); }
+				success({ target: { result } }) { res(result); },
+				error({ target: { error } }) { rej(error); }
 			});
 		});
 	}
@@ -74,7 +74,11 @@ export class Local {
 		// Traverse down the directory handle until we find (or create) the file:
 		while (handle && path.length) {
 			const name = path.shift();
-			handle = await handle[path.length ? 'getDirectoryHandle' : 'getFileHandle'](name, {create});
+			try {
+				handle = await handle[path.length ? 'getDirectoryHandle' : 'getFileHandle'](name, {create});
+			} catch {
+				return;
+			}
 		}
 		if (handle?.kind == 'file') return handle;
 	}
