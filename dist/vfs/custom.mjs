@@ -129,6 +129,8 @@ function file_boiler(file_ptr, method_name, args = [], success = () => SQLITE_OK
 	}
 }
 
+const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
+
 imports['vfs'] ??= {};
 Object.assign(imports['vfs'], {
 	// sqlite3_vfs methods:
@@ -175,6 +177,7 @@ Object.assign(imports['vfs'], {
 		});
 	},
 	xRead(file_ptr, buff_ptr, buff_len, offset) {
+		console.assert(offset < MAX_SAFE, 'Offset overflow!');
 		return file_boiler(file_ptr, 'read', [offset, buff_len], read => {
 			mem8(buff_ptr, buff_len).set(read);
 			if (read.byteLength < buff_len) {
@@ -185,9 +188,11 @@ Object.assign(imports['vfs'], {
 		});
 	},
 	xWrite(file_ptr, buff_ptr, buff_len, offset) {
+		console.assert(offset < MAX_SAFE, 'Offset overflow!');
 		return file_boiler(file_ptr, 'write', [mem8(buff_ptr, buff_len), offset]);
 	},
 	xTruncate(file_ptr, size) {
+		console.assert(size < MAX_SAFE, 'Offset overflow!');
 		return file_boiler(file_ptr, 'trunc', [size]);
 	},
 	xSync(file_ptr, flags) {
