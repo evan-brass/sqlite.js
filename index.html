@@ -11,12 +11,12 @@
 	import {
 		ConnPool, OpenParams, exec, register_vfs
 	} from 'sql.mjs';
-	import opfs from 'sql.mjs/vfs/opfs.mjs';
-	import 'sql.mjs/func/blob_io.mjs';
+	import local from 'sql.mjs/vfs/local.mjs';
+	import { StreamHandle } from 'sql.mjs/func/blob_io.mjs';
 
-	const pool = new ConnPool(new OpenParams({pathname: 'blob-testing.db', vfs: 'opfs'}), {
+	const pool = new ConnPool(new OpenParams({pathname: 'opfs/blob-testing.db'}), {
 		initialized() {
-			register_vfs(opfs);
+			register_vfs(local, 1);
 		}
 	});
 
@@ -51,7 +51,10 @@
 					INSERT INTO files VALUES (${blob.name}, ${blob.type}, zeroblob(${blob.size}));
 					-- Stream the file's data into the blob
 					--   blob_io() will use incremental IO to write the stream into the blob
-					SELECT blob_io(${blob.stream()}, last_insert_rowid(), 'files', 'data');
+					SELECT blob_io(${new StreamHandle({
+						stream: blob.stream(), // The ReadableStream of the File
+						buffer_size: 32_768 // The default buffer size is 4kb but we can manually adjust it
+					})}, last_insert_rowid(), 'files', 'data');
 				`);
 				console.log('Wrote a file:', blob, 'bytes written', bytes_written);
 			}
