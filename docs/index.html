@@ -46,21 +46,18 @@
 			<h1><a href="https://github.com/evan-brass/sql.mjs">sql.mjs</a></h1>
 			<p><a href="https://doc.deno.land/https://unpkg.com/sql.mjs">docs</a> (in-progress)</p>
 		</header>
-		<section id="interface">
-			<p>VFS: <output id="vfsname"></output> Filename: <output id="dbname"></output></p>
-			<p><textarea placeholder="SELECT 'Hello World!';"></textarea></p>
-			<button id="eval">Eval</button>
-			<p>Output:</p>
-			<pre><output id="result"></output></pre>
-		</section>
+		<section id="interface"></section>
 		<script type="importmap">{ "imports": {
 			"sql.mjs": "/dist/index.mjs",
-			"sql.mjs/": "/dist/"
+			"sql.mjs/": "/dist/",
+			"brackish": "https://unpkg.com/brackish@0.1.2",
+			"brackish/": "https://unpkg.com/brackish@0.1.2/src/"
 		}}</script>
 		<script type="module">
 			import {
 				sqlite_initialized, Conn, OpenParams, SqlCommand, register_vfs
 			} from 'sql.mjs';
+			import { mount, html, on, Signal } from "brackish";
 			import {
 				SQLITE_OPEN_READONLY,
 				SQLITE_OPEN_READWRITE,
@@ -81,76 +78,65 @@
 			await sqlite_initialized;
 			register_vfs(local, 1);
 			register_vfs(http);
-
+			
 			// Mount the Origin Private File System folder into the local database:
 			const opfs_root = await navigator.storage.getDirectory();
 			await local.mount(opfs_root, '/opfs');
 
-			// This function doesn't actually open a database, it just fills out an OpenParams object from a template
-			export function open(strings, ...args) {
-				let seen_int = false;
-				const ret = new OpenParams();
-				ret.pathname = strings[0];
-				for (let i = 0; i < args.length; ++i) {
-					ret.pathname += strings[i + 1];
-					const arg = args[i];
-					if (typeof arg == 'number') {
-						if (!seen_int) {
-							ret.flags = 0;
-							seen_int = true;
-						}
-						ret.flags |= arg;
-					}
-					else if (typeof arg == 'string') {
-						ret.vfs = arg;
-					}
-				}
-				return {
-					async [SqlCommand](conn) {
-						await conn.open(ret);
-					}
-				};
-			}
-
 			const conn = new Conn();
-
-			const eval_btn = document.querySelector('#eval');
-			const result = document.querySelector('#result');
-			const code = document.querySelector('textarea');
-			const dbname = document.querySelector('#dbname');
-			const vfsname = document.querySelector('#vfsname');
-			function update_ui() {
-				dbname.innerText = conn.filename();
-				vfsname.innerText = conn.vfs()?.name;
-			}
-			update_ui();
-			function abort() {
-				conn.interrupt();
-			}
-			async function evaluate() {
-				const orig_txt = eval_btn.innerText;
-				eval_btn.innerText = 'Abort';
-				eval_btn.onclick = abort;
-
-				result.innerText = '';
-				try {
-					const res = eval('conn.sql`' + code.value + '`');
-					for await (const row of res) {
-						for (const key in row) {
-							if (row[key] instanceof Uint8Array) row[key] = Array.from(row[key]);
-						}
-						result.insertAdjacentText('beforeend', JSON.stringify(row) + '\n');
-						update_ui();
+			mount(html`
+				<form ${on('submit', async e => {
+					e.preventDefault();
+					const { target, submitter } = e;
+					submitter.setAttribute('disabled', '');
+					const data = new FormData(target);
+					try {
+						await conn.open(new OpenParams({
+							vfs: data.get('vfs'),
+							pathname: data.get('pathname')
+						}));
+					} finally {
+						submitter.removeAttribute('disabled');
+						target.elements.pathname.value = conn.filename() ?? '';
+						target.elements.vfs.value = conn.vfsname() ?? '';
 					}
-				} catch (e) {
-					result.insertAdjacentHTML('beforeend', `<span style="color: red">${e.toString()}</span>`);
-				}
-				eval_btn.innerText = orig_txt;
-				eval_btn.onclick = evaluate;
-
-				update_ui();
-			}
-			eval_btn.onclick = evaluate;
+				})}>
+					<label>VFS
+						<select name="vfs">
+							<option value="">Unspecified</option>
+							<option value="mem">Memory</option>
+							<option value="local">Local</option>
+							<option value="http">HTTP</option>
+						</select>
+					</label>
+					<label>Pathname <input name="pathname" type="text" placeholder="/opfs/test.db"></label>
+					<button>Open</button>
+				</form>
+				<form ${on('submit', async e => {
+					e.preventDefault();
+					const {target, submitter} = e;
+					if (target.is_evaling) {
+						conn.interrupt();
+						submitter.setAttribute('disabled', '');
+					} else {
+						target.is_evaling = true;
+						submitter.innerText = 'Abort';
+						const data = new FormData(target);
+						try {
+							for await (const row of eval('conn.sql`' + data.get('query') + '`')) {
+								console.log(row);
+							}
+						} finally {
+							target.is_evaling = false;
+							submitter.removeAttribute('disabled');
+							submitter.innerText = 'Eval';
+						}
+					}
+				})}>
+					<textarea name="query">SELECT 'Hello World!' AS greet;</textarea>
+					<button>Eval</button>
+				</form>
+			`, document.querySelector('#interface'));
 
 			// Make it so that you can copy code snippets into the text area:
 			document.body.addEventListener('click', e => {
@@ -159,82 +145,60 @@
 				}
 			});
 		</script>
-
-		<h2>Temp</h2>
-		<p><code>${open`file:/opfs/test.db`}</code></p>
-		<p><code>${open`file:test.db?vfs=opfs`}</code></p>
-		<p><code>${open`file:test.db?vfs=http`}</code></p>
-		<p><code>SELECT eval('this.db') AS db_ptr;</code></p>
-		<p><code>SELECT eval('new Date(args[0]).toLocaleDateString()', date()) AS formatted;</code></p>
-		<p><pre><code>SELECT eval('new Date(args[0]).toLocaleDateString("en", {
-	day: "numeric",
-	month: "long",
-	weekday: "long",
-	year: "numeric"
-})', date()) AS formatted;</code></pre></p>
-
-		<h2>Examples</h2>
-		<p>A few things you could try playing around with are: (click the code samples)</p>
-		<ul>
-			<li>Syntax errors: <code>not sql</code></li>
-			<li>Use Date/Time or random functions: <code>SELECT hex(randomblob(20)) AS random, date() AS date;</code></li>
-			<li>Blob literals are not supported, but you can bind TypedArrays as arguments: <code>SELECT hex(${new Uint8Array([222, 173, 190, 239])});</code></li>
-			<li>Make a table: <code>CREATE TABLE IF NOT EXISTS todo(title TEXT, description TEXT, priority INT);</code></li>
-			<li>Insert some data into that table: <pre><code>INSERT INTO todo VALUES 
-	('go for a walk', '*if it isn''t too cold', 3),
-	('do dishes', '*they would''ve been easier to do yesterday...*', 5),
-	('feed the dog', null, '4.5');</code></pre></li>
-			<li>List your todos: <code>SELECT title, description FROM todo ORDER BY priority DESC;</code></li>
-			<li>Do pragma things: <code>PRAGMA table_list;</code></li>
-		</ul>
-		<p>It's hard to see from this demo but the results are returned as a Row object.  As you can see, it has keys and values, but it is also iterable meaning you can use either object or array style destructuring.</p>
-
-		<h2>Non-memory Databases</h2>
-		<p>By default, you'll be connected to an in-memory database which will be lost on refresh.  You can change that by using the open command.</p>
-		<p>These commands are equivalent - they open test.db inside the Origin-Private-File-System:</p>
-		<ul>
-			<li><code>${open`test.db${'opfs'}`}</code></li>
-			<li><code>${open`file://localhost/test.db?vfs=opfs`}</code></li>
-		</ul>
-		<p>Using the open command will close any previous connection and open a new connection.  This resets any connection parameters like busy_timeout, registered functions, connection configurations, etc.</p>
-		<p>But we can do more interesting things.  These commands open databases using the open / save file pickers:</p>
-		<h3>Show the open file picker:</h3>
-		<ul>
-			<li><code>${open`description${'picker'}`}</code></li>
-			<li><code>${open`open:description${'picker'}`}</code></li>
-			<li><code>${open`file://description?vfs=picker`}</code></li>
-			<li><code>${open`file://open:description?vfs=picker`}</code></li>
-		</ul>
-		<h3>Show the save file picker:</h3>
-		<ul>
-			<li><code>${open`file://save:suggested_name?vfs=picker`}</code></li>
-		</ul>
-		<p>For Origin-Private-File-System database files, writable permission is always granted.  But for files openned through the file pickers, the user will be prompted for the neccessary permissions on first use.  You'll need to make sure that the first read / write to the conn happens inside a <a href="https://developer.mozilla.org/en-US/docs/Web/Security/User_activation">user gesture</a>.  In the future, the required permissions might be requested on open instead of on first-use.</p>
-		<p><del>Notice that the picker VFS converts your open:/save: filename into a "filehandle:[number] - [filename]".  You can use "filehandle:[number]" to reopen a database that was previously openned using either the open or save file pickers (This currently only works in Chrome).  The picker VFS stores file handles into an IndexedDB database.  Currently there's no way to list / manage that database but there will likely be ways of doing that in the future.</del><ins>Edit: Actually I don't like how this worked, I'll add something to support reopenning previously picked files later.</ins></p>
-		<h3>Open Databases Over HTTP(S)</h3>
-		<ul>
-			<li><code>${open`file://cdn.jsdelivr.net/gh/alex-hofsteede/zipcode_db/zipcodes.sqlite?vfs=http`}</code></li>
-			<li>Example of opening an empty file as a sqlite database <code>${open`empty.db${'http'}`}</code></li>
-			<li>Example of opening a relative file using a uri <strong>Note:</strong> localhost here is being used to mean "relative to the current website's origin".<code>${open`file://localhost/docs/test.db?vfs=http`}</code></li>
-			<li>Example of loading a file from the user's local computer: <code>${open`file://localhost:80/docs/test.db?vfs=http`}</code></li>
-		</ul>
-		<p>For example, with the zipcodes.sqlite database open, we can find all of the zipcodes in the state of Oregon:</p>
-<pre><code>SELECT zip, cities.name AS city FROM zipcodes
-INNER JOIN cities ON cities.id = zipcodes.city_id
-WHERE state_id = (SELECT id FROM states WHERE name = 'OR');</code></pre>
-		<p>This is a pretty long operation because (with this database's indexes) this requires a full table scan.  The HTTP VFS uses the Range header to do partial reads.  This database uses a 4.5kb page size, but a larger page size would probably be better.</p>
-		<p>The HTTP VFS doesn't support writable files.  The HTTP VFS tells sqlite that the file is immutable, meaning that bad things will happen if you modify the file while someone is reading it.  Luckily, the HTTP VFS performs a first HEAD request and follows redirects.  Subsequent reads will use the redirected URL so you can upgrade a database by uploading a new copy of the database and then migrating the redirect to the new file.</p>
-		<p>Modifying a file while there is a reader should result in an IO error if your server supports etags or last-modified.  The exception to this is for empty databases files, which are never fetched again after the initial HEAD request.</p>
-
-		<h2>Possible Use-Cases</h2>
-		<ul>
-			<li>Adding Full-Text search to a static website: <a href="https://www.sqlite.org/fts5.html">https://www.sqlite.org/fts5.html</a></li>
-			<li>Building content management systems that run client-side - potentially inside the service worker.</li>
-			<li>Editing SQLite databases without needing to install any software.</li>
-			<li>Building interactive SQL education materials.</li>
-			<li>Using R-Trees to create calendar widgets: <a href="https://www.sqlite.org/rtree.html">https://www.sqlite.org/rtree.html</a></li>
-			<li>Building exporters that help people retrieve their data from various online platforms.  This could maybe facilitate user-mobility between / away from walled gardens.</li>
-		</ul>
+		<section>
+			<h2>Temp</h2>
+			<p><code>${open`file:/opfs/test.db`}</code></p>
+			<p><code>${open`file:test.db?vfs=opfs`}</code></p>
+			<p><code>${open`file:test.db?vfs=http`}</code></p>
+			<p><code>SELECT eval('this.db') AS db_ptr;</code></p>
+			<p><code>SELECT eval('new Date(args[0]).toLocaleDateString()', date()) AS formatted;</code></p>
+			<p><pre><code>SELECT eval('new Date(args[0]).toLocaleDateString("en", {
+		day: "numeric",
+		month: "long",
+		weekday: "long",
+		year: "numeric"
+	})', date()) AS formatted;</code></pre></p>
+	
+			<h2>Examples</h2>
+			<p>A few things you could try playing around with are: (click the code samples)</p>
+			<ul>
+				<li>Syntax errors: <code>not sql</code></li>
+				<li>Use Date/Time or random functions: <code>SELECT hex(randomblob(20)) AS random, date() AS date;</code></li>
+				<li>Blob literals are not supported, but you can bind TypedArrays as arguments: <code>SELECT hex(${new Uint8Array([222, 173, 190, 239])});</code></li>
+				<li>Make a table: <code>CREATE TABLE IF NOT EXISTS todo(title TEXT, description TEXT, priority INT);</code></li>
+				<li>Insert some data into that table: <pre><code>INSERT INTO todo VALUES 
+		('go for a walk', '*if it isn''t too cold', 3),
+		('do dishes', '*they would''ve been easier to do yesterday...*', 5),
+		('feed the dog', null, '4.5');</code></pre></li>
+				<li>List your todos: <code>SELECT title, description FROM todo ORDER BY priority DESC;</code></li>
+				<li>Do pragma things: <code>PRAGMA table_list;</code></li>
+			</ul>
+			<p>It's hard to see from this demo but the results are returned as a Row object.  As you can see, it has keys and values, but it is also iterable meaning you can use either object or array style destructuring.</p>
+			<h3>Open Databases Over HTTP(S)</h3>
+			<ul>
+				<li><code>${open`file://cdn.jsdelivr.net/gh/alex-hofsteede/zipcode_db/zipcodes.sqlite?vfs=http`}</code></li>
+				<li>Example of opening an empty file as a sqlite database <code>${open`empty.db${'http'}`}</code></li>
+				<li>Example of opening a relative file using a uri <strong>Note:</strong> localhost here is being used to mean "relative to the current website's origin".<code>${open`file://localhost/docs/test.db?vfs=http`}</code></li>
+				<li>Example of loading a file from the user's local computer: <code>${open`file://localhost:80/docs/test.db?vfs=http`}</code></li>
+			</ul>
+			<p>For example, with the zipcodes.sqlite database open, we can find all of the zipcodes in the state of Oregon:</p>
+	<pre><code>SELECT zip, cities.name AS city FROM zipcodes
+	INNER JOIN cities ON cities.id = zipcodes.city_id
+	WHERE state_id = (SELECT id FROM states WHERE name = 'OR');</code></pre>
+			<p>This is a pretty long operation because (with this database's indexes) this requires a full table scan.  The HTTP VFS uses the Range header to do partial reads.  This database uses a 4.5kb page size, but a larger page size would probably be better.</p>
+			<p>The HTTP VFS doesn't support writable files.  The HTTP VFS tells sqlite that the file is immutable, meaning that bad things will happen if you modify the file while someone is reading it.  Luckily, the HTTP VFS performs a first HEAD request and follows redirects.  Subsequent reads will use the redirected URL so you can upgrade a database by uploading a new copy of the database and then migrating the redirect to the new file.</p>
+			<p>Modifying a file while there is a reader should result in an IO error if your server supports etags or last-modified.  The exception to this is for empty databases files, which are never fetched again after the initial HEAD request.</p>
+	
+			<h2>Possible Use-Cases</h2>
+			<ul>
+				<li>Adding Full-Text search to a static website: <a href="https://www.sqlite.org/fts5.html">https://www.sqlite.org/fts5.html</a></li>
+				<li>Building content management systems that run client-side - potentially inside the service worker.</li>
+				<li>Editing SQLite databases without needing to install any software.</li>
+				<li>Building interactive SQL education materials.</li>
+				<li>Using R-Trees to create calendar widgets: <a href="https://www.sqlite.org/rtree.html">https://www.sqlite.org/rtree.html</a></li>
+				<li>Building exporters that help people retrieve their data from various online platforms.  This could maybe facilitate user-mobility between / away from walled gardens.</li>
+			</ul>
+		</section>
 	</main>
 </body>
 </html>

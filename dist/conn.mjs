@@ -17,63 +17,21 @@ export class OpenParams extends Pointer {
 	constructor() { super(); Object.assign(this, ...arguments); }
 }
 
-function is_anon_arg(val) {
-	return (['object', 'function'].indexOf(typeof val) == -1) || val === null || val instanceof Bindable;
-}
-
-class Bindings {
-	inner = [];
-	strings_from_args(strings, args) {
-		let ret = strings[0];
-		for (let i = 0; i < args.length; ++i) {
-			const arg = args[i];
-			this.inner.push(arg);
-			if (is_anon_arg(arg)) {
-				ret += '?';
-			}
-			ret += strings[i + 1];
-		}
-		return ret;
+const concatenated = new WeakMap(); // template literal strings -> {sql, names}
+function concat_sql(strings) {
+	let ret = concatenated.get(strings);
+	if (ret) return ret;
+	let sql = strings[0];
+	const names = new Map();
+	for (let i = 1; i < strings.length; ++i) {
+		const res = /^([?:@][\w\d]+)/.exec(strings[i]);
+		if (res) { names.set(i - 1, res[1]); }
+		else { sql += '?'; }
+		sql += strings[i];
 	}
-	next_anon() {
-		for (let i = 0; i < this.inner.length; ++i) {
-			const arg = this.inner[i];
-			if (is_anon_arg(arg)) {
-				return this.inner.splice(i, 1)[0];
-			}
-		}
-	}
-	next_named() {
-		for (let i = 0; i < this.inner.length; ++i) {
-			const arg = this.inner[i];
-			// TODO: I don't like the SqlCommand thing
-			if (!is_anon_arg(arg) && !(arg instanceof SqlCommand)) {
-				return this.inner.splice(i, 1)[0];
-			}
-		}
-	}
-	command() {
-		if (this.inner[0] instanceof SqlCommand) {
-			return this.inner.shift();
-		}
-	}
-	bind(stmt) {
-		const num_params = sqlite3.sqlite3_bind_parameter_count(stmt);
-		let named;
-		for (let i = 1; i <= num_params; ++i) {
-			const name_ptr = sqlite3.sqlite3_bind_parameter_name(stmt, i);
-			let arg;
-			if (name_ptr == 0) {
-				arg = this.next_anon();
-			} else {
-				const name = str_read(name_ptr);
-				const key = name.slice(1);
-				named ??= this.next_named();
-				arg = named[key]
-			}
-			Bindable.bind(stmt, i, arg);
-		}
-	}
+	ret = {sql, names};
+	concatenated.set(strings, ret);
+	return ret;
 }
 
 export class Conn {
@@ -204,7 +162,7 @@ export class Conn {
 				let stmt;
 				try {
 					// If we don't have any connection open, then connect.
-					if (!this.ptr) await this.open();
+					// if (!this.ptr) await this.open();
 
 					const res = await sqlite3.sqlite3_prepare_v2(this.ptr, sql_ptr, remainder, stmt_ptr, sql_end_ptr);
 					stmt = memdv().getInt32(stmt_ptr, true);
@@ -220,15 +178,28 @@ export class Conn {
 		}
 	}
 	async *sql(strings, ...args) {
-		const bindings = new Bindings();
-		const concat = bindings.strings_from_args(strings, args);
+		const {sql, names} = concat_sql(strings);
 
-		const command = bindings.command();
-		if (command instanceof SqlCommand) {
-			await command[SqlCommand](this);
+		// Split the arguments into named and anonymous:
+		const anon = [];
+		const named = new Map();
+		for (let i = 0; i < args.length; ++i) {
+			const name = names.get(i);
+			if (name) named.set(name, args[i]);
+			else anon.push(args[i]);
 		}
-		for await (const stmt of this.stmts(concat)) {
-			bindings.bind(stmt);
+
+		// TODO: Prepare all the statements before stepping any of them
+		// TODO: Cache prepared statements keyed off of strings (just like sql / names)
+		for await (const stmt of this.stmts(sql)) {
+			// Bind the parameters:
+			const num_params = sqlite3.sqlite3_bind_parameter_count(stmt);
+			for (let i = 1; i <= num_params; ++i) {
+				const name_ptr = sqlite3.sqlite3_bind_parameter_name(stmt, i);
+				const binding = name_ptr ? named.get(str_read(name_ptr)) : anon.shift();
+				Bindable.bind(stmt, i, binding);
+			}
+
 			let row_class;
 			while (1) {
 				const res = await sqlite3.sqlite3_step(stmt);
@@ -256,11 +227,6 @@ export class Conn {
 				}
 
 				yield row;
-			}
-
-			const command = bindings.command();
-			if (command instanceof SqlCommand) {
-				await command[SqlCommand](this);
 			}
 		}
 	}
