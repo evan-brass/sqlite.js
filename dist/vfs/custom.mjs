@@ -28,7 +28,7 @@ Object.assign(Conn.prototype, {
 
 		return borrow_mem([4, db_name], (vfs_ptr_ptr, db_name) => {
 			const res = sqlite3.sqlite3_file_control(this.ptr, db_name, SQLITE_FCNTL_VFS_POINTER, vfs_ptr_ptr);
-			handle_error(res);
+			handle_error(res, this.ptr);
 			const vfs_ptr = memdv().getInt32(vfs_ptr_ptr, true);
 			const vfs = vfs_impls.get(vfs_ptr)?.vfs;
 			return vfs;
@@ -39,7 +39,7 @@ Object.assign(Conn.prototype, {
 
 		return borrow_mem([4, db_name], (file_ptr_ptr, db_name) => {
 			const res = sqlite3.sqlite3_file_control(this.ptr, db_name, SQLITE_FCNTL_FILE_POINTER, file_ptr_ptr);
-			handle_error(res);
+			handle_error(res, this.ptr);
 			const file_ptr = memdv().getInt32(file_ptr_ptr, true);
 			const file = file_impls.get(file_ptr)?.file;
 			return file;
