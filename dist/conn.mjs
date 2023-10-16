@@ -3,7 +3,7 @@ import { default as sqlite_initialized, sqlite3, memdv } from './sqlite.mjs';
 import {
 	SQLITE_ROW, SQLITE_DONE,
 	SQLITE_OPEN_URI, SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
-
+	SQLITE_FCNTL_VFS_POINTER
 } from "./sqlite_def.mjs";
 import { Bindable, Pointer, value_to_js } from './value.mjs';
 import { borrow_mem, str_read, handle_error } from "./memory.mjs";
@@ -146,6 +146,17 @@ export class Conn {
 		sqlite3.sqlite3_close_v2(old);
 	}
 	// Meta
+	vfsname(db_name = 'main') {
+		if (!this.ptr) return;
+
+		return borrow_mem([4, db_name], (vfs_ptr_ptr, db_name) => {
+			const res = sqlite3.sqlite3_file_control(this.ptr, db_name, SQLITE_FCNTL_VFS_POINTER, vfs_ptr_ptr);
+			handle_error(res, this.ptr);
+			const vfs_ptr = memdv().getInt32(vfs_ptr_ptr, true);
+			const name_ptr = memdv().getInt32(vfs_ptr + 4 * 4 /* .zName is 5th field, preceded by 3 int and 1 ptr */, true);
+			return str_read(name_ptr);
+		});
+	}
 	filename(db_name = 'main') {
 		if (!this.ptr) return;
 		return borrow_mem([db_name], db_name => {
