@@ -107,7 +107,10 @@ export function borrow_mem(args, func) {
 	const inits = []; // The values to set at the memory locations (Uint8Arrays)
 	for (const i in args) {
 		const arg = args[i];
-		if (arg instanceof Span) {
+		if (arg === undefined || arg === null) {
+			mapped[i] = null_span;
+		}
+		else if (arg instanceof Span) {
 			// Don't allocate for things that have already been allocated:
 			mapped[i] = arg;
 		}
