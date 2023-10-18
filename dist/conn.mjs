@@ -1,14 +1,12 @@
-import { Trait } from './util.mjs';
 import { default as sqlite_initialized, sqlite3, memdv } from './sqlite.mjs';
 import {
 	SQLITE_ROW, SQLITE_DONE,
 	SQLITE_OPEN_URI, SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
-	SQLITE_FCNTL_VFS_POINTER
+	SQLITE_FCNTL_VFS_POINTER,
+	SQLITE_PREPARE_PERSISTENT
 } from "./sqlite_def.mjs";
 import { Bindable, Pointer, value_to_js } from './value.mjs';
 import { borrow_mem, str_read, handle_error } from "./memory.mjs";
-
-export const SqlCommand = new Trait("This trait marks special commands which can be used inside template literals tagged with the Conn.sql tag.");
 
 export class OpenParams extends Pointer {
 	pathname = ":memory:";
@@ -34,10 +32,92 @@ function concat_sql(strings) {
 	return ret;
 }
 
+const stmts = new FinalizationRegistry(stmt_ptr => {
+	const db = sqlite3.sqlite3_db_handle(stmt_ptr); // Only used to better handle any possible errors
+	const res = sqlite3.sqlite3_finalize(stmt_ptr);
+	handle_error(res, db);
+});
+export class Statement {
+	#ptr;
+	#db;
+	#bind_i = 1;
+	#row_class;
+	static #make_row_class(column_names) {
+		Object.freeze(column_names);
+		const ret = class Row extends Array {};
+		Object.defineProperty(ret.prototype, 'column_names', { value: column_names, writable: false });
+		for (let i = 0; i < column_names.length; ++i) {
+			if (column_names[i] in ret.prototype) continue;
+			Object.defineProperty(ret.prototype, column_names[i], {
+				get() { return this[i]; },
+				enumerable: true
+			});
+		}
+		return ret;
+	}
+	constructor(ptr) {
+		this.#ptr = ptr;
+		this.#db = sqlite3.sqlite3_db_handle(this.#ptr);
+		stmts.register(this, this.#ptr, this);
+	}
+	finalize() {
+		const res = sqlite3.sqlite3_finalize(this.#ptr);
+		stmts.unregister(this);
+		this.#ptr = 0;
+		handle_error(res, this.#db);
+	}
+	clear() {
+		this.#bind_i = 1;
+		const res = sqlite3.sqlite3_clear_bindings(this.#ptr);
+		handle_error(res, this.#db);
+		return this;
+	}
+	bind(value = null, name) {
+		borrow_mem([name], name => {
+			const i = Number(name) ? sqlite3.sqlite3_bind_parameter_index(this.#ptr, name) : this.#bind_i++;
+			Bindable.bind(this.ptr, i, value);
+		});
+		return this;
+	}
+	bind_all(anon = [], named = new Map()) {
+		const num_params = sqlite3.sqlite3_bind_parameter_count(this.#ptr);
+		for (let i = 1; i <= num_params; ++i) {
+			const name = str_read(sqlite3.sqlite3_bind_parameter_name(this.#ptr, i));
+			Bindable.bind(this.#ptr, i, name ? named.get(name) : anon.shift());
+		}
+		return this;
+	}
+	async *[Symbol.asyncIterator]() {
+		try {
+			while (1) {
+				const res = await sqlite3.sqlite3_step(this.#ptr);
+				if (res == SQLITE_DONE) break;
+				
+				handle_error(res, this.#db);
+				if (res != SQLITE_ROW) throw new Error("wat?");
+				
+				const data_count = sqlite3.sqlite3_data_count(this.#ptr);
+				this.#row_class ??= Statement.#make_row_class(Array.from({length: data_count}, (_, i) => str_read(sqlite3.sqlite3_column_name(this.#ptr, i))));
+
+				const row = new this.#row_class();
+				for (let i = 0; i < data_count; ++i) {
+					row[i] = value_to_js(sqlite3.sqlite3_column_value(this.#ptr, i));
+				}
+				yield row;
+			}
+		} finally {
+			sqlite3.sqlite3_reset(this.#ptr);
+		}
+	}
+	// TODO: Synchronous iterator?
+}
+
 export class Conn {
 	// inits are functions which are called on each opened (or reopened) conn
 	static inits = [];
 	ptr = 0;
+	#prepared = new WeakMap();
+
 	// Lifecycle
 	async open(params = new OpenParams()) {
 		await sqlite_initialized;
@@ -65,6 +145,7 @@ export class Conn {
 		const old = this.ptr;
 		this.ptr = 0;
 		sqlite3.sqlite3_close_v2(old);
+		this.#prepared = new WeakMap();
 	}
 	// Meta
 	dbnames() {
@@ -110,50 +191,46 @@ export class Conn {
 			sqlite3.sqlite3_interrupt(this.ptr);
 		}
 	}
-	// Useful things:
-	async *stmts(sql_txt) {
-		if (!sql_txt) return; // Fast path empty sql (useful if you send a single command using Conn.sql)
-		
-		await sqlite_initialized;
+	prepare(sql, cache_key = undefined) {
+		if (!this.ptr) throw new Error("Can't prepare a SQL statement until the connection has been opened.");
 
-		// Borrow the memory we need.  Unfortunately because we're an async generator we have to use a promise to signal when to release that memory, instead of the usual closure system.
-		let ptrs, release_mem;
-		borrow_mem([4, 4, sql_txt], (...t) => {
-			ptrs = t;
-			return new Promise(res => release_mem = res);
-		});
-		const [sql_end_ptr, stmt_ptr, sql] = ptrs;
+		if (cache_key) {
+			const cached = this.#prepared.get(cache_key);
+			if (cached) return cached;
+		}
 
-		// Initialize the sql_end_ptr to be the start of the allocated sql text
-		memdv().setInt32(sql_end_ptr, sql, true);
-		const sql_end = Number(sql) + sql.len;
-
-		try {
-			while (1) {
-				const sql_ptr = memdv().getInt32(sql_end_ptr, true);
-				const remainder = sql_end - sql_ptr;
-				if (remainder <= 1) break;
-	
-				let stmt;
+		return borrow_mem([4, 4, sql], async (sql_end_ptr, stmt_ptr, sql) => {
+			const flags = cache_key ? SQLITE_PREPARE_PERSISTENT : 0;
+			memdv().setInt32(sql_end_ptr, sql, true);
+			const sql_end = Number(sql) + sql.len;
+			
+			const stmts = [];
+			let remainder = sql.len;
+			while (remainder > 1) {
 				try {
-					// If we don't have any connection open, then connect.
-					// if (!this.ptr) await this.open();
+					const sql_ptr = memdv().getInt32(sql_end_ptr, true);
+					const res = await sqlite3.sqlite3_prepare_v3(this.ptr, sql_ptr, remainder, flags, stmt_ptr, sql_end_ptr);
+					
+					const stmt = memdv().getInt32(stmt_ptr, true);
+					if (stmt) stmts.push(new Statement(stmt));
 
-					const res = await sqlite3.sqlite3_prepare_v2(this.ptr, sql_ptr, remainder, stmt_ptr, sql_end_ptr);
-					stmt = memdv().getInt32(stmt_ptr, true);
 					handle_error(res, this.ptr);
-	
-					if (stmt) yield stmt;
-				} finally {
-					sqlite3.sqlite3_finalize(stmt);
+
+					remainder = sql_end - memdv().getInt32(sql_end_ptr, true);
+				} catch(e) {
+					stmts.forEach(s => s.finalize());
+					throw e;
 				}
 			}
-		} finally {
-			release_mem();
-		}
+
+			if (cache_key) this.#prepared.set(cache_key, stmts);
+
+			return stmts;
+		});
 	}
 	async *sql(strings, ...args) {
 		const {sql, names} = concat_sql(strings);
+		const stmts = await this.prepare(sql, strings);
 
 		// Split the arguments into named and anonymous:
 		const anon = [];
@@ -164,45 +241,9 @@ export class Conn {
 			else anon.push(args[i]);
 		}
 
-		// TODO: Prepare all the statements before stepping any of them
-		// TODO: Cache prepared statements keyed off of strings (just like sql / names)
-		for await (const stmt of this.stmts(sql)) {
-			// Bind the parameters:
-			const num_params = sqlite3.sqlite3_bind_parameter_count(stmt);
-			for (let i = 1; i <= num_params; ++i) {
-				const name_ptr = sqlite3.sqlite3_bind_parameter_name(stmt, i);
-				const binding = name_ptr ? named.get(str_read(name_ptr)) : anon.shift();
-				Bindable.bind(stmt, i, binding);
-			}
-
-			let row_class;
-			while (1) {
-				const res = await sqlite3.sqlite3_step(stmt);
-				handle_error(res, this.ptr);
-
-				if (res == SQLITE_DONE) break;
-				if (res != SQLITE_ROW) throw new Error("wat?");
-
-				const data_count = sqlite3.sqlite3_data_count(stmt);
-
-				// Create a row class with getters for the column names if we haven't done that yet for this stmt:
-				if (!row_class) {
-					row_class = class Row extends Array {};
-					for (let i = 0; i < data_count; ++i) {
-						const column_name = str_read(sqlite3.sqlite3_column_name(stmt, i));
-						Object.defineProperty(row_class.prototype, column_name, { get() { return this[i]; } });
-					}
-				}
-
-				// Fill in the row's values:
-				const row = new row_class();
-				for (let i = 0; i < data_count; ++i) {
-					const value_ptr = sqlite3.sqlite3_column_value(stmt, i);
-					row[i] = value_to_js(value_ptr);
-				}
-
-				yield row;
-			}
+		for (const stmt of stmts) {
+			stmt.clear().bind_all(anon, named);
+			yield* stmt;
 		}
 	}
 }
