@@ -79,8 +79,6 @@ imports['func'] = {
 	},
 	xDestroy(fi) {
 		funcs.delete(fi);
-		// sqlite3.free(func_name_ptr);
-		debugger;
 	},
 	xValue(ctx_ptr) {
 		const func = get_func(ctx_ptr);

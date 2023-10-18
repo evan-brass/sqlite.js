@@ -55,6 +55,7 @@ const null_span = new Span(0, 0);
 leaked.set('\0', null_span);
 const statics = [
 	'main',
+	'temp',
 	'local',
 	'js',
 	'ROLLBACK;',

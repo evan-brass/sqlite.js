@@ -61,49 +61,24 @@ export class Conn {
 			init(this);
 		}
 	}
-	async *backup(dest, { src_db = 'main', dest_db = 'main', pages_per = 5 } = {}) {
-		let dconn;
-		if (dest instanceof OpenParams) {
-			dconn = new Conn();
-			await dconn.open(dest);
-		} else if (dest instanceof Conn) {
-			dconn = dest;
-		} else { throw new Error(); }
-
-		let mem, release_mem;
-		borrow_mem([src_db, dest_db], (...t) => {
-			mem = t;
-			return new Promise(res => release_mem = res);
-		});
-		[src_db, dest_db] = mem;
-
-		let backup;
-		try {
-			backup = await sqlite3.sqlite3_backup_init(dconn.ptr, dest_db, this.ptr, src_db); // Does this need to be awaited?
-			if (!backup) throw new Error('Backup failed');
-
-			while (1) {
-				const res = await sqlite3.sqlite3_backup_step(backup, pages_per);
-				handle_error(res, this.ptr);
-
-				if (res == SQLITE_DONE) break;
-
-				const remaining = sqlite3.sqlite3_backup_remaining(backup);
-				const count = sqlite3.sqlite3_backup_pagecount(backup);
-				yield { remaining, count };
-			}
-		} finally {
-			sqlite3.sqlite3_backup_finish(backup);
-			release_mem();
-			if (dconn != dest) dconn.close();
-		}
-	}
 	close() {
 		const old = this.ptr;
 		this.ptr = 0;
 		sqlite3.sqlite3_close_v2(old);
 	}
 	// Meta
+	dbnames() {
+		if (!this.ptr) return;
+		
+		const ret = [];
+		for (let i = 0; true; ++i) {
+			const name_ptr = sqlite3.sqlite3_db_name(this.ptr, i);
+			if (!name_ptr) break;
+			ret.push(str_read(name_ptr));
+		}
+
+		return ret;
+	}
 	vfsname(db_name = 'main') {
 		if (!this.ptr) return;
 
