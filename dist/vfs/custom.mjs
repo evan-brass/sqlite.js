@@ -16,7 +16,7 @@ import {
 	SQLITE_FCNTL_VFS_POINTER, SQLITE_FCNTL_FILE_POINTER,
 } from "../sqlite_def.mjs";
 import { Conn } from "../conn.mjs";
-import { borrow_mem, leaky, encoder, str_read, handle_error } from "sql.mjs/memory.mjs";
+import { borrow_mem, leaky, encoder, str_read, handle_error } from "../memory.mjs";
 
 const vfs_impls = new Map(); // ptr -> { vfs, errors }
 const file_impls = new Map(); // ptr -> { file, errors }

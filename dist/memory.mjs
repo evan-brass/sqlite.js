@@ -1,5 +1,5 @@
 import { default as sqlite_initialized, sqlite3, mem8, imports } from "./sqlite.mjs";
-import { OutOfMemError, is_promise } from "sql.mjs/util.mjs";
+import { OutOfMemError, is_promise } from "./util.mjs";
 import { SQLITE_OK, SQLITE_ROW, SQLITE_DONE } from "./sqlite_def.mjs";
 
 export const encoder = new TextEncoder();
