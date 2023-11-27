@@ -1,4 +1,3 @@
-// Temporary Dependency on idb because working with IndexedDB sucks
 import {
 	SQLITE_OPEN_CREATE,
 	SQLITE_ACCESS_EXISTS,
@@ -33,7 +32,7 @@ export class Local {
 			});
 		});
 	}
-	async traverse(pathname, flags = 0) {
+	async traverse(pathname, {flags = 0, dir_ok = false} = {}) {
 		if (is_promise(this.#db)) this.#db = await this.#db;
 
 		// TODO: Access any parameters before converting pathname to a String?
@@ -75,12 +74,12 @@ export class Local {
 		while (handle && path.length) {
 			const name = path.shift();
 			try {
-				handle = await handle[path.length ? 'getDirectoryHandle' : 'getFileHandle'](name, {create});
+				handle = (await handle.getFileHandle(name, {create})) ?? (await handle.getDirectoryHandle(name, {create}));
 			} catch {
 				return;
 			}
 		}
-		if (handle?.kind == 'file') return handle;
+		if (dir_ok || handle?.kind == 'file') return handle;
 	}
 	async mount(handle, path) {
 		if (!path.startsWith('/')) path = '/' + path;
@@ -96,7 +95,7 @@ export class Local {
 	// VFS methods:
 	full_pathname(s) { return s; }
 	async open(pathname, flags) {
-		const handle = await this.traverse(pathname, flags);
+		const handle = await this.traverse(pathname, {flags});
 		if (!handle) throw new Error("That file isn't in the Local VFS's database.");
 		return new File(handle, flags, this.#db);
 	}
@@ -106,7 +105,8 @@ export class Local {
 	}
 	async access(pathname, mode) {
 		const handle = await this.traverse(pathname);
-		if (mode == SQLITE_ACCESS_EXISTS) return Boolean(handle);
+		if (!handle) return false;
+		if (mode == SQLITE_ACCESS_EXISTS) return true;
 		if (mode == SQLITE_ACCESS_READWRITE) {
 			const perm = handle.queryPermission('readwrite');
 			return perm == 'granted';
