@@ -31,8 +31,15 @@ __attribute__((import_module("func"), import_name("xInverse"))) void js_xInverse
 __attribute__((import_module("func"), import_name("xDestroy"))) void js_xDestroy(void*);
 __attribute__((import_module("value"), import_name("release"))) void js_release(void*);
 
-__attribute__((visibility("default"))) void* release_ptr() {
-	return &js_release;
+// Pointer Values:
+__attribute__((visibility("default"))) int bind_pointer(sqlite3_stmt* stmt, int i, void* ptr) {
+	return sqlite3_bind_pointer(stmt, i, ptr, "js", &js_release);
+}
+__attribute__((visibility("default"))) void result_pointer(sqlite3_context* ctx, void* ptr) {
+	return sqlite3_result_pointer(ctx, ptr, "js", &js_release);
+}
+__attribute__((visibility("default"))) void* value_pointer(sqlite3_value* value) {
+	return sqlite3_value_pointer(value, "js");
 }
 
 static sqlite3_io_methods IoMethods = {

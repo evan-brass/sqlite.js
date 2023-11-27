@@ -1,7 +1,7 @@
 import { imports, mem8, sqlite3 } from "./sqlite.mjs";
 import { SQLITE3_TEXT, SQLITE_FLOAT, SQLITE_INTEGER, SQLITE_NULL, SQLITE_STATIC, SQLITE_TRANSIENT } from "./sqlite_def.mjs";
 import { OutOfMemError, Trait, is_safe } from "./util.mjs";
-import { leaky, encoder, decoder } from "./memory.mjs";
+import { encoder, decoder } from "./memory.mjs";
 
 export const Bindable = new class extends Trait {
 	constructor() { super("A value that can be bound to a SQLite Statement."); }
@@ -52,7 +52,6 @@ Object.assign(Number.prototype, {
 		}
 	}
 });
-// TODO: Move String implementation. Strings should really receive special handling for static, and to unify them with other strings passed to various SQLite interfaces.
 Object.assign(String.prototype, {
 	[Bindable](...args) { encoder.encode(this)[Bindable](...args, {is_txt: true}); },
 	[Resultable](ctx, {is_error = false} = {}) { encoder.encode(this)[Resultable](ctx, {is_txt: true, is_error}); }
@@ -133,21 +132,29 @@ let pointer_count = 0;
 const pointers = new Map();
 export class Pointer {
 	#ptr = ++pointer_count;
+	refs = 0;
 	constructor() { pointers.set(this.#ptr, this); }
 	destructor() {}
 	get ptr() { return this.#ptr; }
 	[Bindable](stmt, i) {
-		sqlite3.sqlite3_bind_pointer(stmt, i, this.#ptr, leaky('js'), sqlite3.release_ptr());
+		++this.refs;
+		sqlite3.bind_pointer(stmt, i, this.#ptr);
 	}
 	[Resultable](ctx) {
-		sqlite3.sqlite3_result_pointer(ctx, this.#ptr, leaky('js'), sqlite3.release_ptr());
+		++this.refs;
+		sqlite3.result_pointer(ctx, this.#ptr);
 	}
 }
 imports['value'] = {
 	release(ptr) {
 		const obj = pointers.get(ptr);
-		if (pointers.delete(ptr)) {
-			obj.destructor();
+		if (!obj) throw new Error("Unknown Pointer");
+		--obj.refs;
+		if (obj.refs < 0) { throw new Error("Negative Refcount"); }
+		else if (obj.refs == 0) {
+			if (pointers.delete(ptr)) {
+				obj.destructor();
+			}
 		}
 	}
 };
@@ -169,7 +176,7 @@ export class ZeroBlob {
 // Technically, value_ptr should be a protected value, however since JavaScript is single threaded, we should be fine to use value_to_js on unprotected values.  We've compiled SQLite with Threading, because we use asyncify to do coroutines, but as long as our usage of the unprotected value doesn't span an `await` I think we should be fine.
 export function value_to_js(value_ptr) {
 	// First check if it's a pointer:
-	const ptr = sqlite3.sqlite3_value_pointer(value_ptr, leaky('js'));
+	const ptr = sqlite3.value_pointer(value_ptr);
 	if (ptr && pointers.has(ptr)) return pointers.get(ptr);
 
 	const typ = sqlite3.sqlite3_value_type(value_ptr);

@@ -144,6 +144,7 @@ export class File {
 		else if (op == SQLITE_FCNTL_ROLLBACK_ATOMIC_WRITE) {
 			return (async () => {
 				await this.#writable.abort();
+				this.#atomic = false;
 				this.#writable = null;
 				this.#dirty.clear();
 				// Update the file size:
@@ -155,6 +156,7 @@ export class File {
 		else if (op == SQLITE_FCNTL_COMMIT_ATOMIC_WRITE) {
 			return (async () => {
 				await this.#writable.close();
+				this.#atomic = false;
 				this.#writable = null;
 				this.#dirty.clear();
 				return SQLITE_OK;

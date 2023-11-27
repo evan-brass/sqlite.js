@@ -57,7 +57,6 @@ const statics = [
 	'main',
 	'temp',
 	'local',
-	'js',
 	'ROLLBACK;',
 	':memory:',
 	'blob_io'
