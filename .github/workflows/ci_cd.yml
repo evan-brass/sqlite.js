@@ -1,6 +1,8 @@
 name: Build
 
-on: [push]
+on:
+  push:
+    branches: [dev]
 
 jobs:
   build:
@@ -26,3 +28,8 @@ jobs:
 
     - name: Minify + prep for publish
       run: npm run build
+
+    - name: NPM Publish
+      run: npm publish ./dist
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
