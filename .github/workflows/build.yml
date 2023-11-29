@@ -7,13 +7,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: checkout
+    - name: Checkout
       uses: actions/checkout@v4
 
-    - name: compile
+    - name: Compile SQLite
       uses: ./.github/actions/compile
 
-    - name: wasm
+    - name: Artifacts - SQLite WASM Modules
       uses: actions/upload-artifact@v3
       with:
         path: ./*.wasm
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+    
+    - name: Install deps
+      run: npm ci
+
+    - name: Minify + prep for publish
+      run: npm run build
