@@ -16,4 +16,4 @@ jobs:
     - name: wasm
       uses: actions/upload-artifact@v3
       with:
-        path: *.wasm
+        path: ./*.wasm
