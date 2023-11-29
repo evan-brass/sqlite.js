@@ -70,10 +70,10 @@
 				SQLITE_OPEN_PRIVATECACHE,
 				SQLITE_OPEN_NOFOLLOW,
 				SQLITE_OPEN_EXRESCODE,
-			} from 'sql.mjs/sqlite_def.mjs';
-			import 'sql.mjs/func/eval.mjs';
-			import http from 'sql.mjs/vfs/http.mjs';
-			import local from 'sql.mjs/vfs/local.mjs';
+			} from 'sql.mjs/sqlite_def.js';
+			import 'sql.mjs/func/eval.js';
+			import http from 'sql.mjs/vfs/http.js';
+			import local from 'sql.mjs/vfs/local.js';
 
 			await sqlite_initialized;
 			register_vfs(local, 1);

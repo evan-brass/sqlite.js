@@ -1,4 +1,4 @@
-import asyncify from './asyncify.mjs';
+import asyncify from './asyncify.js';
 
 /**
  * Asyncify will automatically stub out all the imports, so we don't have to provide all the imports during wasm instantiation.

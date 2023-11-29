@@ -1,8 +1,8 @@
-import './basics.mjs';
-import { Pointer, Bindable } from "../value.mjs";
-import { Conn } from "../conn.mjs";
-import { mem8, memdv, sqlite3 } from "../sqlite.mjs";
-import { borrow_mem, handle_error } from "../memory.mjs";
+import './basics.js';
+import { Pointer, Bindable } from "../value.js";
+import { Conn } from "../conn.js";
+import { mem8, memdv, sqlite3 } from "../sqlite.js";
+import { borrow_mem, handle_error } from "../memory.js";
 
 // We make ReadableStream / WritableStream Bindable by wrapping them in a StreamHandle which is a subclass of Pointer
 export class StreamHandle extends Pointer {

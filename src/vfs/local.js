@@ -2,9 +2,9 @@ import {
 	SQLITE_OPEN_CREATE,
 	SQLITE_ACCESS_EXISTS,
 	SQLITE_ACCESS_READWRITE
-} from "../sqlite_def.mjs";
-import { File } from "./file.mjs";
-import { is_promise } from "../util.mjs";
+} from "../sqlite_def.js";
+import { File } from "./file.js";
+import { is_promise } from "../util.js";
 
 // A VFS to unify everything with a FileSystemHandle (Which is everything local to this computer):
 //  - The Origin Private File System

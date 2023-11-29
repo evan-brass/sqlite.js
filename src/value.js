@@ -1,7 +1,7 @@
-import { imports, mem8, sqlite3 } from "./sqlite.mjs";
-import { SQLITE3_TEXT, SQLITE_FLOAT, SQLITE_INTEGER, SQLITE_NULL, SQLITE_STATIC, SQLITE_TRANSIENT } from "./sqlite_def.mjs";
-import { OutOfMemError, Trait, is_safe } from "./util.mjs";
-import { encoder, decoder } from "./memory.mjs";
+import { imports, mem8, sqlite3 } from "./sqlite.js";
+import { SQLITE3_TEXT, SQLITE_FLOAT, SQLITE_INTEGER, SQLITE_NULL, SQLITE_STATIC, SQLITE_TRANSIENT } from "./sqlite_def.js";
+import { OutOfMemError, Trait, is_safe } from "./util.js";
+import { encoder, decoder } from "./memory.js";
 
 export const Bindable = new class extends Trait {
 	constructor() { super("A value that can be bound to a SQLite Statement."); }

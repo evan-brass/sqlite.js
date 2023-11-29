@@ -1,22 +1,22 @@
 /**
- * custom.mjs - Adds support for defining custom VFSs.
+ * custom.js - Adds support for defining custom VFSs.
  * If you only ever use in-memory (:memory:) databases, then you don't need to import this file.
  * 
  * Currently, WAL is not support (disabled at compile time).  I think it's possible to support
  * WAL because browsers have shared memory, but I don't currently know how to do it.
  */
-import './basics.mjs';
-import { OutOfMemError, is_promise } from "../util.mjs";
+import './basics.js';
+import { OutOfMemError, is_promise } from "../util.js";
 import {
 	sqlite3, imports, mem8, memdv, 
-} from "../sqlite.mjs";
+} from "../sqlite.js";
 import {
 	SQLITE_OK, SQLITE_BUSY,
 	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ,
 	SQLITE_FCNTL_VFS_POINTER, SQLITE_FCNTL_FILE_POINTER,
-} from "../sqlite_def.mjs";
-import { Conn } from "../conn.mjs";
-import { borrow_mem, leaky, encoder, str_read, handle_error } from "../memory.mjs";
+} from "../sqlite_def.js";
+import { Conn } from "../conn.js";
+import { borrow_mem, leaky, encoder, str_read, handle_error } from "../memory.js";
 
 const vfs_impls = new Map(); // ptr -> { vfs, errors }
 const file_impls = new Map(); // ptr -> { file, errors }

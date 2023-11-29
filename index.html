@@ -4,15 +4,15 @@
 	"sql.mjs/": "https://unpkg.com/sql.mjs/"
 }}</script>
 <script type="importmap">{ "imports": {
-	"sql.mjs": "/dist/index.mjs",
+	"sql.mjs": "/dist/index.js",
 	"sql.mjs/": "/dist/"
 }}</script>
 <script type="module">
 	import {
 		ConnPool, OpenParams, exec, register_vfs
 	} from 'sql.mjs';
-	import local from 'sql.mjs/vfs/local.mjs';
-	import { StreamHandle } from 'sql.mjs/func/blob_io.mjs';
+	import local from 'sql.mjs/vfs/local.js';
+	import { StreamHandle } from 'sql.mjs/func/blob_io.js';
 
 	const pool = new ConnPool(new OpenParams({pathname: 'opfs/blob-testing.db'}), {
 		async initialized() {

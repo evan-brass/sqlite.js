@@ -1,6 +1,6 @@
-import { Conn, OpenParams } from './conn.mjs';
-import { default as sqlite_initialized, sqlite3 } from './sqlite.mjs';
-import { leaky, handle_error } from "./memory.mjs";
+import { Conn, OpenParams } from './conn.js';
+import { default as sqlite_initialized, sqlite3 } from './sqlite.js';
+import { leaky, handle_error } from "./memory.js";
 
 export class ConnPool {
 	#conn_count = 0;

@@ -4,7 +4,7 @@ import {
 	SQLITE_IOCAP_ATOMIC, SQLITE_IOCAP_BATCH_ATOMIC,
 	SQLITE_FCNTL_BEGIN_ATOMIC_WRITE, SQLITE_FCNTL_COMMIT_ATOMIC_WRITE, SQLITE_FCNTL_ROLLBACK_ATOMIC_WRITE,
 	SQLITE_IOCAP_POWERSAFE_OVERWRITE, SQLITE_IOCAP_SAFE_APPEND,
-} from '../sqlite_def.mjs';
+} from '../sqlite_def.js';
 
 
 function get_lock(name, options = {mode: 'shared'}) {

@@ -1,4 +1,4 @@
-// `grep -E "#define" vendor/sqlite.h > dist/sqlite_def.mjs` then manually edit
+// `grep -E "#define" vendor/sqlite.h > dist/sqlite_def.js` then manually edit
 export const SQLITE_VERSION =        "3.43.0"
 export const SQLITE_VERSION_NUMBER = 3043000
 export const SQLITE_SOURCE_ID =      "2023-08-24 12:36:59 0f80b798b3f4b81a7bb4233c58294edd0f1156f36b6ecf5ab8e83631d468778c"

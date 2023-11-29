@@ -1,5 +1,5 @@
-import "./basics.mjs";
-import { Conn } from "../conn.mjs";
+import "./basics.js";
+import { Conn } from "../conn.js";
 
 function js_eval(js, ...args) {
 	if (!js) return;

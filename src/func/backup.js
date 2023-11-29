@@ -1,9 +1,9 @@
-import './basics.mjs';
-import { Pointer, Bindable } from "../value.mjs";
-import { OpenParams } from "../conn.mjs";
-import { Conn } from "../conn.mjs";
-import { mem8, memdv, sqlite3 } from "../sqlite.mjs";
-import { borrow_mem, handle_error } from "../memory.mjs";
+import './basics.js';
+import { Pointer, Bindable } from "../value.js";
+import { OpenParams } from "../conn.js";
+import { Conn } from "../conn.js";
+import { mem8, memdv, sqlite3 } from "../sqlite.js";
+import { borrow_mem, handle_error } from "../memory.js";
 
 
 Conn.inits.push(function define_backup(conn) {

@@ -1,12 +1,12 @@
-import { default as sqlite_initialized, sqlite3, memdv } from './sqlite.mjs';
+import { default as sqlite_initialized, sqlite3, memdv } from './sqlite.js';
 import {
 	SQLITE_ROW, SQLITE_DONE,
 	SQLITE_OPEN_URI, SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
 	SQLITE_FCNTL_VFS_POINTER,
 	SQLITE_PREPARE_PERSISTENT
-} from "./sqlite_def.mjs";
-import { Bindable, Pointer, value_to_js } from './value.mjs';
-import { borrow_mem, str_read, handle_error } from "./memory.mjs";
+} from "./sqlite_def.js";
+import { Bindable, Pointer, value_to_js } from './value.js';
+import { borrow_mem, str_read, handle_error } from "./memory.js";
 
 export class OpenParams extends Pointer {
 	pathname = ":memory:";

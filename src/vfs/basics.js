@@ -1,11 +1,11 @@
 /**
- * basics.mjs - Adds implementations for randomness, sleep, and current time.
+ * basics.js - Adds implementations for randomness, sleep, and current time.
  * You'll need this file if you want to use date or time sql functions,
  * random sql functions, or sqlite3_busy_timeout.
  * If you don't need these functions then you don't need to import this file.
  */
-import { imports, mem8, memdv } from "../sqlite.mjs";
-import { SQLITE_OK } from "../sqlite_def.mjs";
+import { imports, mem8, memdv } from "../sqlite.js";
+import { SQLITE_OK } from "../sqlite_def.js";
 
 // These implementations do not consult custom VFSs.  I don't know why you would need to override these implementations inside a custom VFS, but if you do - let me know.
 imports['vfs'] ??= {};
