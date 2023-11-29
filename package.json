@@ -14,11 +14,16 @@
 		"origin-private-file-system"
 	],
 	"scripts": {
-		"build": "make"
+		"compile": "make",
+		"build": "node build.mjs"
 	},
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/evan-brass/sql.mjs"
 	},
-	"license": "MIT-0"
+	"license": "MIT-0",
+	"devDependencies": {
+		"esbuild": "^0.19.8",
+		"tiny-glob": "^0.2.9"
+	}
 }
