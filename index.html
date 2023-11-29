@@ -15,8 +15,10 @@
 	import { StreamHandle } from 'sql.mjs/func/blob_io.mjs';
 
 	const pool = new ConnPool(new OpenParams({pathname: 'opfs/blob-testing.db'}), {
-		initialized() {
+		async initialized() {
 			register_vfs(local, 1);
+			const opfs_root = await navigator.storage.getDirectory();
+			local.mount(opfs_root, '/opfs');
 		}
 	});
 

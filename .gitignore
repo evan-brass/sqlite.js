@@ -3,3 +3,4 @@ node_modules
 *.wasm
 *.wat
 *.wasm.gz
+dist
