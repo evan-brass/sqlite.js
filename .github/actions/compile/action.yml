@@ -1,0 +1,5 @@
+name: 'compile'
+description: 'Compile SQLite to WebAssembly'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'

@@ -1,1 +1,0 @@
-../vendor/sqlite3.h

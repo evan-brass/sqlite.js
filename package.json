@@ -1,7 +1,7 @@
 {
 	"name": "sql.mjs",
 	"version": "0.22.0",
-	"description": "SQLite Compiled to WASM, asyncified, and then wrapped in a little JavaScript.",
+	"description": "SQLite Compiled to WASM, asyncified, and then wrapped in a lotta JavaScript.",
 	"keywords": [
 		"sqlite",
 		"sqlite3",
@@ -14,13 +14,9 @@
 		"origin-private-file-system"
 	],
 	"scripts": {
-		"build": "make RELEASE=true"
+		"build": "make"
 	},
-	"files": [
-		"dist/**/*.mjs",
-		"dist/*.async.wasm"
-	],
-	"main": "dist/index.mjs",
+	"main": "index.mjs",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/evan-brass/sql.mjs"
