@@ -1,8 +1,6 @@
-name: Build
+name: Build'n Pack
 
-on:
-  push:
-    branches: [dev]
+on: [push]
 
 jobs:
   build:
@@ -29,7 +27,10 @@ jobs:
     - name: Minify + prep for publish
       run: npm run build
 
-    - name: NPM Publish
-      run: npm publish ./dist
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    - name: NPM pack
+      run: npm pack ./dist
+    
+    - name: Artifact - npm package
+      uses: actions/upload-artifact@v3
+      with:
+        path: ./*.tgz

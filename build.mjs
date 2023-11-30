@@ -1,11 +1,12 @@
 import * as esbuild from 'esbuild';
 import glob from 'tiny-glob';
-import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile } from 'node:fs/promises';
 
 const entryPoints = await glob('src/**/*.js');
 await esbuild.build({
 	entryPoints,
 	minify: true,
+	keepNames: true,
 	outdir: 'dist'
 });
 
