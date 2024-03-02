@@ -65,7 +65,7 @@ Object.assign(ArrayBuffer.prototype, {
 	[Resultable](...args) { new Uint8Array(this)[Resultable](...args); }
 });
 // We won't implement Bindable / Resultable for TypedArrays with BYTES_PER_ELEMENT > 1 because wasm is big endian and we don't know what endianness the native machine has.  We will, however implement Bindable / Resultable for DataView because then we can assume the the user has managed endianess properly.
-// ArrayBuffer, DataView, and Strings differ their implementations to Uint8Array.
+// ArrayBuffer, DataView, and Strings delegate their implementations to Uint8Array.
 Object.assign(Uint8Array.prototype, {
 	// TODO: Remove is_static and replace it with a Set of static pointers?
 	// is_txt, and is_static are flags used by implementations that delegate to this implementation
@@ -121,7 +121,7 @@ Object.assign(Error.prototype, {
 	// Errors can be a result, but they can't be Bound
 	[Resultable](...args) { String(this)[Resultable](...args, {is_error: true}); }
 });
-// Special case for OutOfMemError When result:
+// Special case for OutOfMemError when result:
 Object.assign(OutOfMemError.prototype, {
 	[Resultable](ctx) {
 		sqlite3.sqlite3_result_error_nomem(ctx);

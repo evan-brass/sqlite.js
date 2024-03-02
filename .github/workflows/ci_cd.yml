@@ -16,6 +16,7 @@ jobs:
     - name: Artifacts - SQLite WASM Modules
       uses: actions/upload-artifact@v3
       with:
+        name: wasm
         path: ./*.wasm
 
     - name: Setup Node
@@ -33,4 +34,5 @@ jobs:
     - name: Artifact - npm package
       uses: actions/upload-artifact@v3
       with:
+        name: pkg
         path: ./*.tgz
