@@ -1,0 +1,9 @@
+{
+	"imports": {
+		
+	},
+	"tasks": {
+		"build-in-docker": "docker run -v ./dist:/scratch/dist $(docker build --quiet . -f build/Dockerfile)",
+		"build": "deno run --allow-run --allow-read --allow-write build/build.js"
+	}
+}
