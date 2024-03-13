@@ -13,10 +13,7 @@
 		"opfs",
 		"origin-private-file-system"
 	],
-	"scripts": {
-		"compile": "make",
-		"build": "node build.mjs"
-	},
+	"scripts": {},
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/evan-brass/sql.mjs"
