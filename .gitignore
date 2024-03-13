@@ -1,4 +1,3 @@
-wasi-sdk-20.0
 node_modules
 *.wasm
 *.wat

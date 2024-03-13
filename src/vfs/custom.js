@@ -14,7 +14,7 @@ import {
 	SQLITE_OK, SQLITE_BUSY,
 	SQLITE_IOERR, SQLITE_IOERR_SHORT_READ,
 	SQLITE_FCNTL_VFS_POINTER, SQLITE_FCNTL_FILE_POINTER,
-} from "../sqlite_def.js";
+} from "../dist/sqlite_def.js";
 import { Conn } from "../conn.js";
 import { borrow_mem, leaky, encoder, str_read, handle_error } from "../memory.js";
 

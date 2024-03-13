@@ -2,7 +2,7 @@ import {
 	SQLITE_OPEN_CREATE,
 	SQLITE_ACCESS_EXISTS,
 	SQLITE_ACCESS_READWRITE
-} from "../sqlite_def.js";
+} from "../dist/sqlite_def.js";
 import { File } from "./file.js";
 import { is_promise } from "../util.js";
 

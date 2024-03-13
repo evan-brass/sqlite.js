@@ -17,7 +17,7 @@
 #endif
 ```
 4. Run a build `deno task build` or `deno task build-in-docker`
-5. Check the diff of sqlite3.h and look for added / modified #defines.  Make sure that those changes are reflected in dist/sqlite_def.js.  Update [build/sqlite_def.js:20] to fix.
+5. Check the diff of sqlite3.h and look for added / modified #defines.  Make sure that those changes are reflected in [src/dist/sqlite_def.js].  Update [build/sqlite_def.js:20] to fix.
 
 # Future Tasks:
 * TODO: Automate removing the the `__wasi__` define

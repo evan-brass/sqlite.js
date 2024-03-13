@@ -48,14 +48,14 @@
 		</header>
 		<section id="interface"></section>
 		<script type="importmap">{ "imports": {
-			"sql.mjs": "/dist/index.mjs",
-			"sql.mjs/": "/dist/",
+			"sql.mjs": "/src/index.js",
+			"sql.mjs/": "/src/",
 			"brackish": "https://unpkg.com/brackish@0.1.2",
 			"brackish/": "https://unpkg.com/brackish@0.1.2/src/"
 		}}</script>
 		<script type="module">
 			import {
-				sqlite_initialized, Conn, OpenParams, SqlCommand, register_vfs
+				sqlite_initialized, Conn, OpenParams, register_vfs
 			} from 'sql.mjs';
 			import { mount, html, on, Signal } from "brackish";
 			import {
@@ -70,7 +70,7 @@
 				SQLITE_OPEN_PRIVATECACHE,
 				SQLITE_OPEN_NOFOLLOW,
 				SQLITE_OPEN_EXRESCODE,
-			} from 'sql.mjs/sqlite_def.js';
+			} from 'sql.mjs/dist/sqlite_def.js';
 			import 'sql.mjs/func/eval.js';
 			import http from 'sql.mjs/vfs/http.js';
 			import local from 'sql.mjs/vfs/local.js';

@@ -2,7 +2,7 @@ import {
 	SQLITE_OPEN_READONLY,
 	SQLITE_NOTFOUND,
 	SQLITE_IOCAP_IMMUTABLE,
-} from '../sqlite_def.js';
+} from '../dist/sqlite_def.js';
 
 // Example DB: https://phiresky.github.io/world-development-indicators-sqlite/split-db/db.sqlite3.000
 

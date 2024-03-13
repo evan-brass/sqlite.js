@@ -9,7 +9,7 @@ export const imports = {};
 
 export let sqlite3;
 const stack_size = 2 ** 15; // This is pretty big.  I think a smaller value would work for release builds, but for debug builds I think this is necessary.
-export default asyncify(fetch(new URL('sqlite3.async.wasm', import.meta.url)), imports, { stack_size }).then(exports => {
+export default asyncify(fetch(new URL('dist/sqlite3.async.wasm', import.meta.url)), imports, { stack_size }).then(exports => {
 	sqlite3 = exports;
 	sqlite3._start(); // Call the main function
 

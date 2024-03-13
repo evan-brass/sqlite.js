@@ -1,5 +1,5 @@
 import { imports, mem8, sqlite3 } from "./sqlite.js";
-import { SQLITE3_TEXT, SQLITE_FLOAT, SQLITE_INTEGER, SQLITE_NULL, SQLITE_STATIC, SQLITE_TRANSIENT } from "./sqlite_def.js";
+import { SQLITE3_TEXT, SQLITE_FLOAT, SQLITE_INTEGER, SQLITE_NULL, SQLITE_STATIC, SQLITE_TRANSIENT } from "./dist/sqlite_def.js";
 import { OutOfMemError, Trait, is_safe } from "./util.js";
 import { encoder, decoder } from "./memory.js";
 

@@ -5,7 +5,7 @@
  * If you don't need these functions then you don't need to import this file.
  */
 import { imports, mem8, memdv } from "../sqlite.js";
-import { SQLITE_OK } from "../sqlite_def.js";
+import { SQLITE_OK } from "../dist/sqlite_def.js";
 
 // These implementations do not consult custom VFSs.  I don't know why you would need to override these implementations inside a custom VFS, but if you do - let me know.
 imports['vfs'] ??= {};
