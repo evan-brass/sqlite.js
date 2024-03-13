@@ -1,9 +1,12 @@
 {
 	"imports": {
-		"std/": "https://deno.land/std@0.219.0/"
+		"std/": "https://deno.land/std@0.219.0/",
+		"sqloaf/": "./src/",
+		"sqloaf": "./src/index.js"
 	},
 	"tasks": {
 		"build-in-docker": "docker run -v ./src/dist:/scratch/src/dist $(docker build --quiet . -f build/Dockerfile)",
-		"build": "deno run --allow-run --allow-read --allow-write build/build.js"
+		"build": "deno run --allow-run --allow-read --allow-write build/build.js",
+		"test": "deno test --allow-read"
 	}
 }
