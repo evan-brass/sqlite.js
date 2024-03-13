@@ -1,6 +1,6 @@
 {
 	"imports": {
-		
+		"std/": "https://deno.land/std@0.219.0/"
 	},
 	"tasks": {
 		"build-in-docker": "docker run -v ./dist:/scratch/dist $(docker build --quiet . -f build/Dockerfile)",

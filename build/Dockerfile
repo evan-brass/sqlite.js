@@ -5,4 +5,6 @@ WORKDIR /scratch
 
 ADD --link . .
 
+RUN deno cache build/build.js
+
 CMD ["deno", "task", "build"]
