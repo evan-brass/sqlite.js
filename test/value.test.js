@@ -1,5 +1,6 @@
 import { assertEquals } from "std/assert/assert_equals.ts";
 import { Conn, rows } from 'sqloaf/conn.js';
+import { Pointer, ZeroBlob } from "sqloaf/value.js";
 
 const conn = new Conn();
 await conn.open();
@@ -21,4 +22,28 @@ Deno.test(async function min_safe_integer() {
 	assertEquals(one_under, BigInt(Number.MIN_SAFE_INTEGER) - 1n);
 	assertEquals(min, Number.MIN_SAFE_INTEGER);
 	assertEquals(one_over, Number.MIN_SAFE_INTEGER + 1);
+});
+
+Deno.test(async function pointer_identity() {
+	// We should get the exact same javascript object back when selecting a pointer.
+	const p = new (class TestPointer extends Pointer {})();
+	const [[res]] = await rows(conn.sql`SELECT ${p};`);
+	assertEquals(p, res);
+});
+
+Deno.test(async function zeroblob() {
+	const [[t]] = await rows(conn.sql`SELECT ${new ZeroBlob(15)};`);
+	assertEquals(t, new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
+});
+
+Deno.test(async function real() {
+	const [[t]] = await rows(conn.sql`SELECT ${0.55};`);
+	assertEquals(t, 0.55);
+});
+
+Deno.test(async function booleans() {
+	const [[t1]] = await rows(conn.sql`SELECT ${true};`);
+	assertEquals(t1, 1);
+	const [[t2]] = await rows(conn.sql`SELECT ${false};`);
+	assertEquals(t2, 0);
 });
