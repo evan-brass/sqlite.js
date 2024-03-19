@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title>SQLoaf: Shell</title>
+		<style>
+			code {
+				display: inline-block;
+				background-color: #eee;
+				padding: 0.5em;
+				font-size: 0.9em;
+				white-space: break-spaces;
+			}
+			#interface {
+				margin: 1em;
+			}
+			html {
+				font-size: 16px;
+				line-height: 1.5;
+				font-family: sans-serif;
+				tab-size: 4ch;
+			}
+			main {
+				max-width: 90ch;
+				margin: 1em auto;
+			}
+			textarea {
+				box-sizing: border-box;
+				width: 100%;
+				resize: vertical;
+				min-height: 10em;
+			}
+			pre output {
+				display: block;
+				border: 1px solid #aaa;
+				padding: 1em;
+			}
+			pre {
+				white-space: break-spaces;
+				word-wrap: break-word;
+			}
+		</style>
+		<script type="importmap">{ "imports": {
+			"sqloaf": "/src/index.js",
+			"sqloaf/": "/src/"
+		}}</script>
+	</head>
+	<body>
+		<main>
+			<header>
+				<h1>SQLoaf</h1>
+			</header>
+			<noscript>
+				<p>This website uses JavaScript and WebAssembly to run SQLite in your browser.</p>
+			</noscript>
+			<form name="open">
+				<label>VFS
+					<select name="vfs">
+						<option value="">Unspecified</option>
+						<option value="mem">Memory</option>
+						<option value="local">Local</option>
+						<option value="http">HTTP</option>
+					</select>
+				</label>
+				<label>Pathname <input name="pathname" type="text" placeholder="/opfs/test.db"></label>
+				<button disabled>Open</button>
+			</form>
+			<form name="query">
+				<textarea name="query">SELECT 'Hello World!' AS greet;</textarea>
+				<button disabled>Eval</button>
+			</form>
+			<table>
+
+			</table>
+			<script type="module">
+				import { Conn } from 'sqloaf';
+				const conn = new Conn();
+				await conn.open();
+
+				document.body.addEventListener('submit', async e => {
+					console.log(e);
+					const { submitter, target } = e;
+					if (target.name == 'open') {
+						// Disable queries:
+						const query_btn = document.querySelector('form[name="query"] button');
+						query_btn.disabled = true;
+
+
+						// Enable queries
+						query_btn.disabled = false;
+					}
+					else if (target.name == 'query') {
+						if ()
+					}
+					e.preventDefault();
+				});
+				document.querySelector('form[name="open"] button').disabled = false;
+			</script>
+		</main>
+	</body>
+</html>

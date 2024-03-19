@@ -37,6 +37,14 @@
 			white-space: break-spaces;
 			word-wrap: break-word;
 		}
+
+		table {
+			border-collapse: collapse;
+		}
+		td {
+			border: 1px solid;
+			padding: 5px;
+		}
 	</style>
 	<!-- <base href="/docs/"> -->
 </head>
@@ -84,34 +92,8 @@
 			await local.mount(opfs_root, '/opfs');
 
 			const conn = new Conn();
+			await conn.open();
 			mount(html`
-				<form ${on('submit', async e => {
-					e.preventDefault();
-					const { target, submitter } = e;
-					submitter.setAttribute('disabled', '');
-					const data = new FormData(target);
-					try {
-						await conn.open(new OpenParams({
-							vfs: data.get('vfs'),
-							pathname: data.get('pathname')
-						}));
-					} finally {
-						submitter.removeAttribute('disabled');
-						target.elements.pathname.value = conn.filename() ?? '';
-						target.elements.vfs.value = conn.vfsname() ?? '';
-					}
-				})}>
-					<label>VFS
-						<select name="vfs">
-							<option value="">Unspecified</option>
-							<option value="mem">Memory</option>
-							<option value="local">Local</option>
-							<option value="http">HTTP</option>
-						</select>
-					</label>
-					<label>Pathname <input name="pathname" type="text" placeholder="/opfs/test.db"></label>
-					<button>Open</button>
-				</form>
 				<form ${on('submit', async e => {
 					e.preventDefault();
 					const {target, submitter} = e;
@@ -123,9 +105,32 @@
 						submitter.innerText = 'Abort';
 						const data = new FormData(target);
 						try {
-							for await (const row of eval('conn.sql`' + data.get('query') + '`')) {
-								console.log(row);
+							const results = document.querySelector('#results');
+							while (results.firstChild) results.firstChild.remove();
+
+							const stmts = await conn.prepare(data.get('query'));
+							for (const stmt of stmts) {
+								const table = document.createElement('table');
+								results.append(table);
+
+								let tbody;
+								for await (const row of stmt) {
+									if (!tbody) {
+										const head_row = table.createTHead().insertRow();
+										for (const name of row.column_names) {
+											head_row.insertCell().innerText = name;
+										}
+										tbody = table.createTBody();
+									}
+									const data_row = tbody.insertRow();
+									for (const val of row) {
+										data_row.insertCell().innerText = String(val);
+									}
+								}
 							}
+							// for await (const row of eval('conn.sql`' + data.get('query') + '`')) {
+							// 	console.log(row);
+							// }
 						} finally {
 							target.is_evaling = false;
 							submitter.removeAttribute('disabled');
@@ -136,6 +141,7 @@
 					<textarea name="query">SELECT 'Hello World!' AS greet;</textarea>
 					<button>Eval</button>
 				</form>
+				<section id="results"></section>
 			`, document.querySelector('#interface'));
 
 			// Make it so that you can copy code snippets into the text area:

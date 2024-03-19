@@ -5,6 +5,7 @@
 		"sqloaf": "./src/index.js"
 	},
 	"tasks": {
+		"compile": "docker run -it --rm -v ./src/dist:/build/dist $(docker build --quiet -t sqlite.js.builder -f build/Dockerfile .)",
 		"build-in-docker": "docker run -v ./src/dist:/scratch/src/dist $(docker build --quiet . -f build/Dockerfile)",
 		"build": "deno run --allow-run --allow-read --allow-write build/build.js",
 		"test": "deno test --allow-read"

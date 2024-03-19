@@ -1,10 +1,12 @@
+# syntax=docker/dockerfile:1.7-labs
 FROM alpine:edge AS builder
-RUN apk add build-base clang17 lld binaryen wasi-sdk deno
+RUN apk add build-base llvm17 clang17 lld binaryen wasi-sdk
 
-WORKDIR /scratch
+WORKDIR /build
 
-ADD --link . .
+COPY --parents --link c_src vendor .
+COPY --link build/Makefile .
 
-RUN deno cache build/build.js
+VOLUME /build/dist
 
-CMD ["deno", "task", "build"]
+ENTRYPOINT ["make"]
