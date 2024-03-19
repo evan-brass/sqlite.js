@@ -80,16 +80,8 @@
 				SQLITE_OPEN_EXRESCODE,
 			} from 'sql.mjs/dist/sqlite_def.js';
 			import 'sql.mjs/func/eval.js';
-			import http from 'sql.mjs/vfs/http.js';
-			import local from 'sql.mjs/vfs/local.js';
-
-			await sqlite_initialized;
-			register_vfs(local, 1);
-			register_vfs(http);
-			
-			// Mount the Origin Private File System folder into the local database:
-			const opfs_root = await navigator.storage.getDirectory();
-			await local.mount(opfs_root, '/opfs');
+			import 'sql.mjs/vfs/http.js?register';
+			import 'sql.mjs/vfs/local.js?register&default&opfs';
 
 			const conn = new Conn();
 			await conn.open();

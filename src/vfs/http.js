@@ -91,4 +91,12 @@ export class Http {
 		return String(url);
 	}
 }
-export default new Http();
+
+const instance = new Http();
+export default instance;
+
+const options = new URL(import.meta.url).searchParams;
+if (options.has('register')) {
+	const { register_vfs } = await import('./custom.js');
+	await register_vfs(instance, options.has('default'));
+}

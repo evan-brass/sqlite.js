@@ -12,7 +12,7 @@ dist/sqlite3.wasm: c_src/main.c c_src/sqlite3.c
 		-target wasm32-unknown-wasi \
 		-Ic_src -Ivendor \
 		-D_HAVE_SQLITE_CONFIG_H \
-		-Wl,--export-all \
+		-Wl,--export-dynamic,--export=malloc,--export=free,--export=realloc,--export=strlen \
 		-o $@ \
 		$^
 

@@ -8,7 +8,8 @@
 import './basics.js';
 import { OutOfMemError, is_promise } from "../util.js";
 import {
-	sqlite3, imports, mem8, memdv, 
+	default as initialized,
+	sqlite3, imports, mem8, memdv,
 } from "../sqlite.js";
 import {
 	SQLITE_OK, SQLITE_BUSY,
@@ -47,7 +48,8 @@ Object.assign(Conn.prototype, {
 	}
 });
 
-export function register_vfs(vfs, make_default = false) {
+export async function register_vfs(vfs, make_default = false) {
+	await initialized;
 	const vfs_ptr = sqlite3.allocate_vfs(leaky(vfs.name), vfs.max_pathname);
 	if (!vfs_ptr) throw new OutOfMemError();
 	vfs_impls.set(vfs_ptr, { vfs, errors: []});

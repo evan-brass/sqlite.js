@@ -1,6 +1,6 @@
 import { assertEquals } from "std/assert/assert_equals.ts";
-import { Conn, rows } from 'sqloaf/conn.js';
-import { Pointer, ZeroBlob } from "sqloaf/value.js";
+import { Conn, rows } from 'sqlite.js/conn.js';
+import { Pointer, ZeroBlob } from "sqlite.js/value.js";
 
 const conn = new Conn();
 await conn.open();

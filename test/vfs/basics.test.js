@@ -1,6 +1,6 @@
 import { assertEquals, assertNotEquals } from 'std/assert/mod.ts';
-import { rows, Conn } from "sqloaf/conn.js";
-import 'sqloaf/vfs/basics.js';
+import { rows, Conn } from "sqlite.js/conn.js";
+import 'sqlite.js/vfs/basics.js';
 
 const conn = new Conn();
 await conn.open();

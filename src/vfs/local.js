@@ -114,4 +114,17 @@ export class Local {
 		throw new Error('not implemented');
 	}
 }
-export default new Local();
+
+const instance = new Local();
+export default instance;
+
+const options = new URL(import.meta.url).searchParams;
+if (options.has('register')) {
+	const { register_vfs } = await import('./custom.js');
+	await register_vfs(instance, options.has('default'));
+
+	if (options.has('opfs')) {
+		const opfs_root = await navigator.storage.getDirectory();
+		await instance.mount(opfs_root, '/opfs');
+	}
+}
