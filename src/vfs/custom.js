@@ -104,7 +104,7 @@ function vfs_boiler(vfs_ptr, method_name, args = [], success = () => SQLITE_OK, 
 	const {vfs, errors} = vfs_impls.get(vfs_ptr) ?? {};
 	if (!vfs) return error();
 
-	const err = e => (errors.push(e), error());
+	const err = e => {console.warn(e); return error() };
 	const suc = res => success(res, {vfs, errors});
 	
 	try {
@@ -112,14 +112,14 @@ function vfs_boiler(vfs_ptr, method_name, args = [], success = () => SQLITE_OK, 
 		if (is_promise(ret)) return ret.then(suc, err);
 		return suc(ret);
 	} catch (e) {
-		err(e);
+		return err(e);
 	}
 }
 function file_boiler(file_ptr, method_name, args = [], success = () => SQLITE_OK, error = () => SQLITE_IOERR) {
 	const {file, errors} = file_impls.get(file_ptr) ?? {};
 	if (!file) return error();
 
-	const err = e => (errors.push(e), error());
+	const err = e => {console.warn(e); return error() };
 	const suc = res => success(res, {file, errors});
 
 	try {
@@ -127,7 +127,7 @@ function file_boiler(file_ptr, method_name, args = [], success = () => SQLITE_OK
 		if (is_promise(ret)) return ret.then(suc, err);
 		return suc(ret);
 	} catch (e) {
-		err(e);
+		return err(e);
 	}
 }
 
