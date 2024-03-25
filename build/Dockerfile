@@ -9,4 +9,4 @@ COPY --link build/Makefile .
 
 VOLUME /build/dist
 
-ENTRYPOINT ["make"]
+ENTRYPOINT ["make", "-B"]
