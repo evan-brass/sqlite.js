@@ -6,6 +6,6 @@
 	},
 	"tasks": {
 		"compile": "docker run -it --rm -v ./src/dist:/build/dist $(docker build --quiet -t sqlite.js.builder -f build/Dockerfile .)",
-		"test": "deno test --allow-read"
+		"test": "deno test --allow-read --allow-net"
 	}
 }

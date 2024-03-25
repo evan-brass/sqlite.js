@@ -4,8 +4,6 @@ import {
 	SQLITE_IOCAP_IMMUTABLE,
 } from '../dist/sqlite_def.js';
 
-// Example DB: https://phiresky.github.io/world-development-indicators-sqlite/split-db/db.sqlite3.000
-
 function check_err(resp) {
 	if (resp.ok) return;
 	throw new Error(`HTTP VFS:(${resp.status}) ${resp.statusText}`)
@@ -36,6 +34,9 @@ class HttpFile {
 	constructor(response, flags) {
 		this.flags = flags;
 		this.#url = response.url;
+		const {1: size} = /\/([0-9]+)$/.exec(response.headers.get('Content-Range'));
+		this.#size = BigInt(size);
+		response.body.cancel();
 	}
 	sector_size = 0;
 	// IO:
@@ -44,22 +45,16 @@ class HttpFile {
 		// Gosh, I really wish Math.min worked with BigInts.
 		let end = offset + BigInt(len);
 		end -= 1n; // Byte ranges are inclusive for some reason...
-		const resp = await fetch(this.#url, { headers: {
-			'Range': `bytes=${offset}-${end}`
-		} });
+		const headers = new Headers();
+		headers.set('Range', `bytes=${offset}-${end}`);
+		const resp = await fetch(this.#url, { headers, cache: 'force-cache', redirect: 'error' });
 		check_err(resp);
 		if (resp.status !== 206) throw new Error("Received a non-partial response.");
 
 		return new Uint8Array(await resp.arrayBuffer());
 	}
 	size() {
-		if (this.#size !== false) return this.#size;
-		return (async () => {
-			const resp = await fetch(this.#url, {method: 'head'});
-			check_err(resp);
-			this.#size = BigInt(resp.headers.get('Content-Length'));
-			return this.#size;
-		})();
+		return this.#size;
 	}
 	close() {}
 	file_control(_op, _arg) { return SQLITE_NOTFOUND; }
@@ -74,11 +69,11 @@ export class Http {
 		url.protocol = filename.get_parameter('proto', url.protocol);
 
 		// Fetch the db.  Follow redirects, and determine if range queries are supported.
-		const resp = await fetch(url, {headers: {'Range': 'bytes=0-99'}});
+		const resp = await fetch(url, {headers: {'Range': 'bytes=0-99'}, cache: 'reload', redirect: 'follow'});
 		check_err(resp);
 
 		// Check if the server supported our range request (returned partial content)
-		if (resp.status == 206) {
+		if (resp.status == 206 && resp.headers.has('Content-Range')) {
 			return new HttpFile(resp, flags);
 		} else {
 			return new BlobFile(await resp.blob(), flags);
@@ -87,7 +82,7 @@ export class Http {
 	delete(_filename, _sync) { throw new Error('Unimplementable'); }
 	access(_filename, _flags) { return false; }
 	full_pathname(pathname) {
-		const url = new URL(pathname, location);
+		const url = new URL(pathname, location ?? 'http://localhost');
 		return String(url);
 	}
 }
