@@ -73,6 +73,18 @@ export class Statement {
 		}
 		return this;
 	}
+	get sql() {
+		const ptr = sqlite3.sqlite3_sql(this.#ptr);
+		return str_read(ptr);
+	}
+	get normalized() {
+		const ptr = sqlite3.sqlite3_normalized_sql(this.#ptr);
+		return str_read(ptr);
+	}
+	get column_names() {
+		const length = sqlite3.sqlite3_column_count(this.#ptr);
+		return Array.from({length}, (_, i) => str_read(sqlite3.sqlite3_column_name(this.#ptr, i)));
+	}
 	async *[Symbol.asyncIterator]() {
 		try {
 			while (1) {
