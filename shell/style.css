@@ -1,0 +1,27 @@
+main {
+	max-width: 80ch;
+	margin: 0 auto;
+}
+textarea {
+	display: block;
+	width: 100%;
+	resize: block;
+	min-height: 100px;
+}
+table {
+	border-collapse: collapse;
+}
+td, th {
+	border: 1px solid;
+	padding: 5px;
+}
+tbody tr:nth-of-type(2n + 1) {
+	background-color: #eee;
+}
+table {
+	border: 1px solid;
+	width: 100%;
+}
+.error {
+	color: red;
+}

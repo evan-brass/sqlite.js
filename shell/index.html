@@ -2,99 +2,91 @@
 <html>
 	<head>
 		<meta charset="UTF-8">
-		<title>SQLoaf: Shell</title>
-		<style>
-			code {
-				display: inline-block;
-				background-color: #eee;
-				padding: 0.5em;
-				font-size: 0.9em;
-				white-space: break-spaces;
-			}
-			#interface {
-				margin: 1em;
-			}
-			html {
-				font-size: 16px;
-				line-height: 1.5;
-				font-family: sans-serif;
-				tab-size: 4ch;
-			}
-			main {
-				max-width: 90ch;
-				margin: 1em auto;
-			}
-			textarea {
-				box-sizing: border-box;
-				width: 100%;
-				resize: vertical;
-				min-height: 10em;
-			}
-			pre output {
-				display: block;
-				border: 1px solid #aaa;
-				padding: 1em;
-			}
-			pre {
-				white-space: break-spaces;
-				word-wrap: break-word;
-			}
-		</style>
+		<title>sqlite.js: SQL Shell</title>
+		<link rel="stylesheet" href="./style.css">
 		<script type="importmap">{ "imports": {
-			"sqloaf": "/src/index.js",
-			"sqloaf/": "/src/"
+			"sqlite.js": "/src/index.js",
+			"sqlite.js/": "/src/"
 		}}</script>
 	</head>
 	<body>
 		<main>
 			<header>
-				<h1>SQLoaf</h1>
+				<h1>sqlite.js</h1>
 			</header>
 			<noscript>
 				<p>This website uses JavaScript and WebAssembly to run SQLite in your browser.</p>
 			</noscript>
-			<form name="open">
-				<label>VFS
-					<select name="vfs">
-						<option value="">Unspecified</option>
-						<option value="mem">Memory</option>
-						<option value="local">Local</option>
-						<option value="http">HTTP</option>
-					</select>
-				</label>
-				<label>Pathname <input name="pathname" type="text" placeholder="/opfs/test.db"></label>
-				<button disabled>Open</button>
-			</form>
-			<form name="query">
+			<form>
 				<textarea name="query">SELECT 'Hello World!' AS greet;</textarea>
 				<button disabled>Eval</button>
 			</form>
-			<table>
-
-			</table>
+			<div id="results"></div>
 			<script type="module">
-				import { Conn } from 'sqloaf';
+				import { Conn } from 'sqlite.js';
+				import 'sqlite.js/vfs/http.js?register';
+				import { default as localvfs } from 'sqlite.js/vfs/local.js?register&default&opfs';
+
 				const conn = new Conn();
 				await conn.open();
+				let running = false;
 
 				document.body.addEventListener('submit', async e => {
-					console.log(e);
-					const { submitter, target } = e;
-					if (target.name == 'open') {
-						// Disable queries:
-						const query_btn = document.querySelector('form[name="query"] button');
-						query_btn.disabled = true;
-
-
-						// Enable queries
-						query_btn.disabled = false;
-					}
-					else if (target.name == 'query') {
-						if ()
-					}
 					e.preventDefault();
+					const { submitter, target } = e;
+
+					if (running) {
+						conn.interrupt();
+						submitter.disabled = true;
+					} else {
+						running = true;
+						submitter.innerText = 'Abort';
+
+						const data = new FormData(target);
+	
+						const results = document.getElementById('results');
+						// Clear the results:
+						while (results.firstChild) results.firstChild.remove();
+	
+						try {
+							for await(const stmt of eval('conn.stmts`' + data.get('query') + '`')) {
+								const table = document.createElement('table');
+								results.append(table);
+
+								// List the column names
+								let head_tr;
+								for (const name of stmt.column_names) {
+									if (!table.caption) table.createCaption().innerText = stmt.sql;
+									head_tr ??= table.createTHead().insertRow();
+
+									const th = document.createElement('th');
+									th.innerText = name;
+									head_tr.append(th);
+								}
+
+								// Append rows to the table as they become available
+								for await (const row of stmt) {
+									if (table.tBodies.length < 1) table.createTBody();
+									const tr = table.tBodies[0].insertRow();
+									for (const data of row) {
+										tr.insertCell().innerText = String(data);
+									}
+								}
+							}
+						} catch (e) {
+							const el = document.createElement('pre');
+							el.classList.add('error');
+							el.innerText = String(e);
+							results.append(el);
+						} finally {
+							running = false;
+							submitter.innerText = 'Eval';
+							submitter.disabled = false;
+						}
+					}
 				});
-				document.querySelector('form[name="open"] button').disabled = false;
+
+				document.querySelector('button').disabled = false;
 			</script>
 		</main>
 	</body>
