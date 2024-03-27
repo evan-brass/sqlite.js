@@ -32,8 +32,13 @@ Deno.test(async function pointer_identity() {
 });
 
 Deno.test(async function zeroblob() {
-	const [[t]] = await rows(conn.sql`SELECT ${new ZeroBlob(15)};`);
-	assertEquals(t, new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
+	// Note: We can't use await rows() here because blob types are represented as Uint8Arrays that reference wasm memory and are only valid for the lifetime of that row.
+	const rows = conn.sql`SELECT ${new ZeroBlob(15)};`;
+	assertEquals(await rows.next(), {
+		value: [new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])],
+		done: false
+	});
+	assertEquals(await rows.next(), {value: undefined, done: true});
 });
 
 Deno.test(async function real() {

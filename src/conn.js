@@ -2,8 +2,7 @@ import { default as sqlite_initialized, sqlite3, memdv } from './sqlite.js';
 import {
 	SQLITE_ROW, SQLITE_DONE,
 	SQLITE_OPEN_URI, SQLITE_OPEN_CREATE, SQLITE_OPEN_EXRESCODE, SQLITE_OPEN_READWRITE,
-	SQLITE_FCNTL_VFS_POINTER,
-	SQLITE_PREPARE_PERSISTENT
+	SQLITE_FCNTL_VFS_POINTER
 } from "./dist/sqlite_def.js";
 import { Bindable, Pointer, value_to_js } from './value.js';
 import { borrow_mem, str_read, handle_error } from "./memory.js";
@@ -108,7 +107,6 @@ export class Conn {
 	// inits are functions which are called on each opened (or reopened) conn
 	static inits = [];
 	ptr = 0;
-	#prepared = new WeakMap();
 
 	// Lifecycle
 	async open(params = new OpenParams()) {
@@ -137,7 +135,6 @@ export class Conn {
 		const old = this.ptr;
 		this.ptr = 0;
 		sqlite3.sqlite3_close_v2(old);
-		this.#prepared = new WeakMap();
 	}
 	// Meta
 	dbnames() {
@@ -183,48 +180,11 @@ export class Conn {
 			sqlite3.sqlite3_interrupt(this.ptr);
 		}
 	}
-	prepare(sql, cache_key = undefined) {
-		if (!this.ptr) throw new Error("Can't prepare a SQL statement until the connection has been opened.");
-
-		if (cache_key) {
-			const cached = this.#prepared.get(cache_key);
-			if (cached) return cached;
-		}
-
-		return borrow_mem([4, 4, sql], async (sql_end_ptr, stmt_ptr, sql) => {
-			const flags = cache_key ? SQLITE_PREPARE_PERSISTENT : 0;
-			memdv().setInt32(sql_end_ptr, sql, true);
-			const sql_end = Number(sql) + sql.len;
-			
-			const stmts = [];
-			let remainder = sql.len;
-			while (remainder > 1) {
-				try {
-					const sql_ptr = memdv().getInt32(sql_end_ptr, true);
-					const res = await sqlite3.sqlite3_prepare_v3(this.ptr, sql_ptr, remainder, flags, stmt_ptr, sql_end_ptr);
-					
-					const stmt = memdv().getInt32(stmt_ptr, true);
-					if (stmt) stmts.push(new Statement(stmt));
-
-					handle_error(res, this.ptr);
-
-					remainder = sql_end - memdv().getInt32(sql_end_ptr, true);
-				} catch(e) {
-					stmts.forEach(s => s.finalize());
-					throw e;
-				}
-			}
-
-			if (cache_key) this.#prepared.set(cache_key, stmts);
-
-			return stmts;
-		});
-	}
 	// stmts yields the statments (pre-bound with values from args)
 	async *stmts(strings, ...args) {
-		const {sql, names} = concat_sql(strings);
-		const stmts = await this.prepare(sql, strings);
-	
+		if (!this.ptr) throw new Error("Can't prepare any SQL statements unless the connection is open.");
+		const {sql: sql_txt, names} = concat_sql(strings);
+
 		// Split the arguments into named and anonymous:
 		const anon = [];
 		const named = new Map();
@@ -233,10 +193,42 @@ export class Conn {
 			if (name) named.set(name, args[i]);
 			else anon.push(args[i]);
 		}
-	
-		for (const stmt of stmts) {
-			stmt.clear().bind_all(anon, named);
-			yield stmt;
+
+		// Borrow the memeory that we need:
+		let release_mem;
+		let mem;
+		borrow_mem([4, 4, sql_txt], (...args) => {
+			mem = args;
+			return new Promise(res => release_mem = res);
+		});
+		try {
+			const [sql_end_ptr, stmt_ptr, sql] = mem;
+			const flags = 0; // TODO: Allow preparing persistent statements?
+			memdv().setInt32(sql_end_ptr, sql, true);
+			const sql_end = Number(sql) + sql.len;
+			
+			let remainder = sql.len;
+			while (remainder > 1) {
+				const sql_ptr = memdv().getInt32(sql_end_ptr, true);
+				const res = await sqlite3.sqlite3_prepare_v3(this.ptr, sql_ptr, remainder, flags, stmt_ptr, sql_end_ptr);
+				
+				const ptr = memdv().getInt32(stmt_ptr, true);
+				const stmt = ptr ? new Statement(ptr) : false;
+				try {
+					handle_error(res, this.ptr);
+
+					if (stmt) {
+						stmt.clear().bind_all(anon, named);
+						yield stmt;
+					}
+				} finally {
+					if (stmt) stmt.finalize();
+				}
+				remainder = sql_end - memdv().getInt32(sql_end_ptr, true);
+			}
+
+		} finally {
+			release_mem();
 		}
 	}
 	// sql yields the actual rows from the statements
