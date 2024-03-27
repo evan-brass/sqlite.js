@@ -6,7 +6,7 @@ const conn = new Conn();
 await conn.open();
 
 Deno.test(async function arraybuffer() {
-	const [{ hex }] = await rows(conn.sql`SELECT hex(${new Uint8Array([222, 173, 190, 239])}) AS hex;`);
+	const [[hex]] = await rows(conn.sql`SELECT hex(${new Uint8Array([222, 173, 190, 239])}) AS hex;`);
 	assertEquals(hex, 'DEADBEEF');
 });
 

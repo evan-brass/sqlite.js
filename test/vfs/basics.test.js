@@ -11,8 +11,8 @@ await conn.open();
  */
 
 Deno.test(async function randomness() {	
-	const [{random: t1}] = await rows(conn.sql`SELECT hex(randomblob(20)) AS random;`);
-	const [{random: t2}] = await rows(conn.sql`SELECT hex(randomblob(20)) AS random;`);
+	const [[t1]] = await rows(conn.sql`SELECT hex(randomblob(20)) AS random;`);
+	const [[t2]] = await rows(conn.sql`SELECT hex(randomblob(20)) AS random;`);
 
 	assertEquals(typeof t1, 'string');
 	assertEquals(t1.length, 40);
@@ -20,7 +20,7 @@ Deno.test(async function randomness() {
 });
 
 Deno.test(async function datetime() {
-	const [{now}] = await rows(conn.sql`SELECT datetime() AS now;`);
+	const [[now]] = await rows(conn.sql`SELECT datetime() AS now;`);
 
 	assertEquals(typeof now, 'string');
 });

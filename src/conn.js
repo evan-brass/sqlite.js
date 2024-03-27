@@ -41,20 +41,6 @@ export class Statement {
 	#ptr;
 	#db;
 	#bind_i = 1;
-	#row_class;
-	static #make_row_class(column_names) {
-		Object.freeze(column_names);
-		const ret = class Row extends Array {};
-		Object.defineProperty(ret.prototype, 'column_names', { value: column_names, writable: false });
-		for (let i = 0; i < column_names.length; ++i) {
-			if (column_names[i] in ret.prototype) continue;
-			Object.defineProperty(ret.prototype, column_names[i], {
-				get() { return this[i]; },
-				enumerable: true
-			});
-		}
-		return ret;
-	}
 	constructor(ptr) {
 		this.#ptr = ptr;
 		this.#db = sqlite3.sqlite3_db_handle(this.#ptr);
@@ -95,15 +81,9 @@ export class Statement {
 				
 				handle_error(res, this.#db);
 				if (res != SQLITE_ROW) throw new Error("wat?");
-				
-				const data_count = sqlite3.sqlite3_data_count(this.#ptr);
-				this.#row_class ??= Statement.#make_row_class(Array.from({length: data_count}, (_, i) => str_read(sqlite3.sqlite3_column_name(this.#ptr, i))));
 
-				const row = new this.#row_class();
-				for (let i = 0; i < data_count; ++i) {
-					row[i] = value_to_js(sqlite3.sqlite3_column_value(this.#ptr, i));
-				}
-				yield row;
+				const length = sqlite3.sqlite3_data_count(this.#ptr);
+				yield Array.from({length}, (_, i) => value_to_js(sqlite3.sqlite3_column_value(this.#ptr, i)));
 			}
 		} finally {
 			sqlite3.sqlite3_reset(this.#ptr);

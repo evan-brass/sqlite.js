@@ -14,7 +14,7 @@ Deno.test(async function load_zipcodes() {
 		WHERE zip = 97702
 	;`);
 	assertEquals(result.length, 1);
-	const [{city, state}] = result;
+	const [[city, state]] = result;
 	assertEquals(city, 'Bend');
 	assertEquals(state, 'OR');
 });
