@@ -220,10 +220,11 @@ export class Conn {
 			return stmts;
 		});
 	}
-	async *sql(strings, ...args) {
+	// stmts yields the statments (pre-bound with values from args)
+	async *stmts(strings, ...args) {
 		const {sql, names} = concat_sql(strings);
 		const stmts = await this.prepare(sql, strings);
-
+	
 		// Split the arguments into named and anonymous:
 		const anon = [];
 		const named = new Map();
@@ -232,9 +233,15 @@ export class Conn {
 			if (name) named.set(name, args[i]);
 			else anon.push(args[i]);
 		}
-
+	
 		for (const stmt of stmts) {
 			stmt.clear().bind_all(anon, named);
+			yield stmt;
+		}
+	}
+	// sql yields the actual rows from the statements
+	async *sql(strings, ...args) {
+		for await (const stmt of this.stmts(strings, ...args)) {
 			yield* stmt;
 		}
 	}
