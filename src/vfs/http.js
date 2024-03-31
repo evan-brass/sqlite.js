@@ -34,7 +34,7 @@ class HttpFile {
 	constructor(response, flags) {
 		this.flags = flags;
 		this.#url = response.url;
-		const {1: size} = /\/([0-9]+)$/.exec(response.headers.get('Content-Range'));
+		const size = /\/([0-9]+)$/.exec(response.headers.get('Content-Range'))?.[1] ?? response.headers.get('Content-Length');
 		this.#size = BigInt(size);
 		response.body.cancel();
 	}
@@ -69,15 +69,20 @@ export class Http {
 		url.protocol = filename.get_parameter('proto', url.protocol);
 
 		// Fetch the db.  Follow redirects, and determine if range queries are supported.
-		const resp = await fetch(url, {headers: {'Range': 'bytes=0-99'}, cache: 'reload', redirect: 'follow'});
+		let resp = await fetch(url, {headers: {'Range': 'bytes=0-99'}, cache: 'reload', redirect: 'follow'});
 		check_err(resp);
-
-		// Check if the server supported our range request (returned partial content)
-		if (resp.status == 206 && resp.headers.has('Content-Range')) {
-			return new HttpFile(resp, flags);
-		} else {
+		
+		if (resp.status != 206) {
 			return new BlobFile(await resp.blob(), flags);
 		}
+
+		// Check if the server supports Content-Range.  If not then pull the file size from the Content-Length of a HEAD request
+		// (This usually happens if a server doesn't Access-Control-Expose-Header the Content-Range)
+		if (!resp.headers.has('Content-Range')) {
+			resp = await fetch(resp.url, {method: 'HEAD', cache: 'reload'});
+			check_err(resp);
+		}
+		return new HttpFile(resp, flags);
 	}
 	delete(_filename, _sync) { throw new Error('Unimplementable'); }
 	access(_filename, _flags) { return false; }
