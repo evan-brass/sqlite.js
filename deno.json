@@ -1,4 +1,7 @@
 {
+	"name": "@evan-brass/sqlite",
+	"version": "0.2.0",
+	"exports": "./src/index.js",
 	"imports": {
 		"std/": "https://deno.land/std@0.219.0/",
 		"sqlite.js/": "./src/",
@@ -7,5 +10,13 @@
 	"tasks": {
 		"compile": "docker run -it --rm -v ./src/dist:/build/dist $(docker build --quiet -t sqlite.js.builder -f build/Dockerfile .)",
 		"test": "deno test --allow-read --allow-net"
+	},
+	"publish": {
+		"include": [
+			"LICENSE",
+			"README.md",
+			"src"
+		],
+		"exclude": ["!src/dist"]
 	}
 }

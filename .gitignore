@@ -1,4 +1,1 @@
-*.wasm
-*.wat
-*.wasm.gz
 dist
