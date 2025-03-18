@@ -1,1 +1,2 @@
-dist
+src/dist/*
+c_src/sqlite3.c
