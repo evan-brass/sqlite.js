@@ -5,8 +5,8 @@
 		<title>sqlite.js: SQL Shell</title>
 		<link rel="stylesheet" href="./style.css">
 		<script type="importmap">{ "imports": {
-			"sqlite.js": "/src/index.js",
-			"sqlite.js/": "/src/"
+			"sqlite.js": "../src/index.js",
+			"sqlite.js/": "../src/"
 		}}</script>
 	</head>
 	<body>
@@ -43,11 +43,11 @@
 						submitter.innerText = 'Abort';
 
 						const data = new FormData(target);
-	
+
 						const results = document.getElementById('results');
 						// Clear the results:
 						while (results.firstChild) results.firstChild.remove();
-	
+
 						try {
 							for await(const stmt of eval('conn.stmts`' + data.get('query') + '`')) {
 								const table = document.createElement('table');

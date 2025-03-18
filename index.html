@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script type="importmap">{ "imports": {
-	"sql.mjs": "/src/index.js",
-	"sql.mjs/": "/src/"
+	"sql.mjs": "./src/index.js",
+	"sql.mjs/": "./src/"
 }}</script>
 <script type="module">
 	import {
@@ -83,17 +83,17 @@
 		for (const url of obj_urls) {
 			URL.revokeObjectURL(url);
 		}
-		
+
 		await exec(conn.sql`BEGIN;`);
 		for await (const {rowid, filename, type, size} of conn.sql`SELECT rowid, filename, type, length(data) AS size FROM files;`) {
 			// Create a blob and then object URL for the file:
 			const blob = await (async () => {
 				const ts = new TransformStream();
-	
+
 				const res = new Response(ts.readable, { headers: {
 					'Content-Type': type,
 				}});
-	
+
 				// Simultaneously Turn the response into a js Blob and stream the SQLite Blob into the request.
 				const [ret] = await Promise.all([
 					res.blob(),

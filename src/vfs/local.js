@@ -84,7 +84,7 @@ export class Local {
 	async mount(handle, path) {
 		if (!path.startsWith('/')) path = '/' + path;
 		if (!path.endsWith('/')) path += '/';
-		
+
 		if (is_promise(this.#db)) this.#db = await this.#db;
 		const trans = this.#db.transaction('handles', 'readwrite');
 		await new Promise((res, rej) => on(trans.objectStore('handles').put(handle, path), {
