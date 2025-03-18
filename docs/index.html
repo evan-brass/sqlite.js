@@ -100,8 +100,8 @@
 							const results = document.querySelector('#results');
 							while (results.firstChild) results.firstChild.remove();
 
-							const stmts = await conn.prepare(data.get('query'));
-							for (const stmt of stmts) {
+							const stmts = eval('conn.stmts`' + data.get('query') + '`');
+							for await (const stmt of stmts) {
 								const table = document.createElement('table');
 								results.append(table);
 
@@ -109,7 +109,7 @@
 								for await (const row of stmt) {
 									if (!tbody) {
 										const head_row = table.createTHead().insertRow();
-										for (const name of row.column_names) {
+										for (const name of stmt.column_names) {
 											head_row.insertCell().innerText = name;
 										}
 										tbody = table.createTBody();
@@ -145,9 +145,9 @@
 		</script>
 		<section>
 			<h2>Temp</h2>
-			<p><code>${open`file:/opfs/test.db`}</code></p>
-			<p><code>${open`file:test.db?vfs=opfs`}</code></p>
-			<p><code>${open`file:test.db?vfs=http`}</code></p>
+			<p><code>ATTACH 'file:/opfs/test.db' AS test</code></p>
+			<p><code>ATTACH 'file:test.db?vfs=opfs' AS test</code></p>
+			<p><code>ATTACH 'file:test.db?vfs=http' AS test</code></p>
 			<p><code>SELECT eval('this.db') AS db_ptr;</code></p>
 			<p><code>SELECT eval('new Date(args[0]).toLocaleDateString()', date()) AS formatted;</code></p>
 			<p><pre><code>SELECT eval('new Date(args[0]).toLocaleDateString("en", {
@@ -174,10 +174,10 @@
 			<p>It's hard to see from this demo but the results are returned as a Row object.  As you can see, it has keys and values, but it is also iterable meaning you can use either object or array style destructuring.</p>
 			<h3>Open Databases Over HTTP(S)</h3>
 			<ul>
-				<li><code>${open`file://cdn.jsdelivr.net/gh/alex-hofsteede/zipcode_db/zipcodes.sqlite?vfs=http`}</code></li>
-				<li>Example of opening an empty file as a sqlite database <code>${open`empty.db${'http'}`}</code></li>
-				<li>Example of opening a relative file using a uri <strong>Note:</strong> localhost here is being used to mean "relative to the current website's origin".<code>${open`file://localhost/docs/test.db?vfs=http`}</code></li>
-				<li>Example of loading a file from the user's local computer: <code>${open`file://localhost:80/docs/test.db?vfs=http`}</code></li>
+				<li><code>ATTACH 'file://cdn.jsdelivr.net/gh/alex-hofsteede/zipcode_db/zipcodes.sqlite?vfs=http AS zipcodes</code></li>
+				<li>Example of opening an empty file as a sqlite database <code>ATTACH 'file:empty.db?vfs=http'</code></li>
+				<li>Example of opening a relative file using a uri <strong>Note:</strong> localhost here is being used to mean "relative to the current website's origin".<code>ATTACH 'file://localhost/docs/test.db?vfs=http`}</code></li>
+				<li>Example of loading a file from the user's local computer: <code>ATTACH 'file://localhost:80/docs/test.db?vfs=http'</code></li>
 			</ul>
 			<p>For example, with the zipcodes.sqlite database open, we can find all of the zipcodes in the state of Oregon:</p>
 	<pre><code>SELECT zip, cities.name AS city FROM zipcodes
