@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<title>sqlite.js: SQL Shell</title>
+		<link rel="stylesheet" href="./style.css">
+		<script type="importmap">{ "imports": {
+			"sqlite.js": "../src/index.js",
+			"sqlite.js/": "../src/"
+		}}</script>
+	</head>
+	<body>
+		<script defer>
+			// Make it so that you can copy code snippets into the text area:
+			document.body.addEventListener('click', e => {
+				if (e.target.matches('code')) {
+					document.querySelector('[name="query"]').value = e.target.innerText;
+				}
+			});
+		</script>
+		<main>
+			<header>
+				<h1>sqlite.js</h1>
+			</header>
+			<noscript>
+				<p>This website uses JavaScript and WebAssembly to run SQLite in your browser.</p>
+			</noscript>
+			<form>
+				<textarea name="query">SELECT 'Hello World!' AS greeting;</textarea>
+				<button disabled>Eval</button>
+			</form>
+			<div id="results"></div>
+			<script type="module">
+				import { Conn } from 'sqlite.js';
+				import 'sqlite.js/vfs/http.js?register';
+				import { default as localvfs } from 'sqlite.js/vfs/local.js?register&default&opfs';
+
+				const conn = new Conn();
+				await conn.open();
+				let running = false;
+
+				document.body.addEventListener('submit', async e => {
+					e.preventDefault();
+					const { submitter, target } = e;
+
+					if (running) {
+						conn.interrupt();
+						submitter.disabled = true;
+					} else {
+						running = true;
+						submitter.innerText = 'Abort';
+
+						const data = new FormData(target);
+
+						const results = document.getElementById('results');
+						// Clear the results:
+						while (results.firstChild) results.firstChild.remove();
+
+						try {
+							for await(const stmt of eval('conn.stmts`' + data.get('query') + '`')) {
+								const table = document.createElement('table');
+								results.append(table);
+
+								// List the column names
+								let head_tr;
+								for (const name of stmt.column_names) {
+									if (!table.caption) table.createCaption().innerText = stmt.sql;
+									head_tr ??= table.createTHead().insertRow();
+
+									const th = document.createElement('th');
+									th.innerText = name;
+									head_tr.append(th);
+								}
+
+								// Append rows to the table as they become available
+								for await (const row of stmt) {
+									if (table.tBodies.length < 1) table.createTBody();
+									const tr = table.tBodies[0].insertRow();
+									for (const data of row) {
+										tr.insertCell().innerText = String(data);
+									}
+								}
+							}
+						} catch (e) {
+							const el = document.createElement('pre');
+							el.classList.add('error');
+							el.innerText = String(e);
+							results.append(el);
+						} finally {
+							running = false;
+							submitter.innerText = 'Eval';
+							submitter.disabled = false;
+						}
+					}
+				});
+
+				document.querySelector('button').disabled = false;
+			</script>
+			<section>
+				<h2>Basic Examples</h2>
+				<p>A few things you could try playing around with are: (click the code samples)</p>
+				<ul>
+					<li>Syntax errors: <code>not sql</code></li>
+					<li>Use Date/Time or random functions: <code>SELECT hex(randomblob(20)) AS random, date() AS date;</code></li>
+					<li>Blob literals are not supported, but you can bind TypedArrays as arguments:
+						<code>SELECT hex(${new Uint8Array([222, 173, 190, 239])});</code></li>
+					<li>Do pragma things: <code>PRAGMA table_list;</code></li>
+					<li>Use SQLite's JSON functionality: <pre><code>SELECT * FROM json_tree(${JSON.stringify({
+	Hello: 'World!',
+	foo: {
+		bar: true
+	}
+})});</code></pre></li>
+				</ul>
+			</section>
+			<section>
+				<h2>Attaching Databases</h2>
+				<p>In addition to supporting in-memory databases, sqlite.js supports opening databases over HTTP, in the Origin Private File System, or (in Chrome) on your local computer.  Databases opened using the HTTP vfs are read-only.  When opening a database over HTTP, an initial HEAD request is used get the file's size and to check for redirects.  All future HTTP requests will use the resolved (redirected) url, so you can update the database file by uploading a new version and then changing the redirect to point at that new file.</p>
+				<p>Databases on your local computer (OPFS or otherwise) can be read+write.  The browser API used to modify local files (<a href="https://developer.mozilla.org/en-US/docs/Web/API/FileSystemWritableFileStream">FileSystemWritableFileStream</a>) unfortunately doesn't do in-place modification - it copies the file and then does an atomic overwrite.  The local file VFS tells SQLite that this is what is happening so SQLite can optimize around this.  I would like to use the in-place modification API, but that feature is gated behind using a worker thread and I haven't gotten around to that yet.</p>
+
+				<h3>Opening an HTTP database</h3>
+				<p>Let's open a database of zipcodes and run a few queries on it:</p>
+				<ul>
+					<li>Attach the database
+						<pre><code>ATTACH 'file://cdn.jsdelivr.net/gh/alex-hofsteede/zipcode_db/zipcodes.sqlite?vfs=http' AS zipcodes</code></pre>
+					</li>
+					<li>Find the city and state name for a given zip code
+<pre><code>SELECT zip, cities.name AS city, states.name AS state FROM zipcodes
+INNER JOIN cities ON city_id = cities.id
+INNER JOIN states ON state_id = states.id
+WHERE zip = ${97702};</code></pre>
+					</li>
+				</ul>
+				<p>When using the HTTP VFS each page of the database is fetched using a separate HTTP range request.  When the database's indexes match the query it can run quickly and download only part of the database.  When the indexes don't match the database you can end up with long-running queries.  sqlite.js is concurrent in that you can run multiple sqlite functions at the same time (as long as they are suspended by some async operation).  SQLite has support for interrupting / canceling a query.  I've wired up the "Eval" button to become an "Abort" button, which you can try clicking during the next query which lists all of the zipcodes in the state of Oregon:</p>
+<pre><code>SELECT zip, cities.name AS city FROM zipcodes
+	INNER JOIN cities ON cities.id = zipcodes.city_id
+	WHERE state_id = (SELECT id FROM states WHERE name = 'OR');</code></pre>
+
+				<h3>Opening a database in the OPFS</h3>
+				<p>The origin private file system directory is mounted at /opfs/. Since this page loaded the local vfs as default, we don't need the vfs search parameter.  </p>
+				<ol>
+					<li>Attach the database <code>ATTACH 'file:/opfs/test.db' AS test;</code></li>
+					<li>Make a table: <code>CREATE TABLE IF NOT EXISTS test.todo(title TEXT, description TEXT, priority INT);</code></li>
+					<li>Insert some data into that table:
+<pre><code>INSERT INTO todo VALUES
+	('go for a walk', '*if it isn''t too cold', 3),
+	('do dishes', '*they would''ve been easier to do yesterday...*', 5),
+	('feed the dog', null, '4.5');</code></pre>
+					</li>
+					<li>List your todos: <code>SELECT title, description FROM todo ORDER BY priority DESC;</code></li>
+				</ol>
+				<p>You can reload the page, re-attach the test database and your todos will still be there.  The OPFS is </p>
+			</section>
+			<section>
+				<h2>Possible Use-Cases</h2>
+				<ul>
+					<li>Adding Full-Text search to a static website: <a
+							href="https://www.sqlite.org/fts5.html">https://www.sqlite.org/fts5.html</a></li>
+					<li>Building content management systems that run client-side - potentially inside the service worker.</li>
+					<li>Editing SQLite databases without needing to install any software.</li>
+					<li>Building interactive SQL education materials.</li>
+					<li>Using R-Trees to create calendar widgets: <a
+							href="https://www.sqlite.org/rtree.html">https://www.sqlite.org/rtree.html</a></li>
+					<li>Building exporters that help people retrieve their data from various online platforms. This could maybe
+						facilitate user-mobility between / away from walled gardens.</li>
+				</ul>
+			</section>
+		</main>
+	</body>
+</html>

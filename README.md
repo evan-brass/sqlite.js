@@ -1,6 +1,8 @@
 # sqlite.js
 Another SQLite wrapper library.
 
+[Playground](./playground/)
+
 Features:
 * Incremental Blob IO via Readable / Writable Streams
 * Custom VFSs with async implementations

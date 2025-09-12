@@ -1,6 +1,7 @@
 main {
 	max-width: 80ch;
 	margin: 0 auto;
+	tab-size: 4;
 }
 textarea {
 	display: block;
@@ -24,4 +25,11 @@ table {
 }
 .error {
 	color: red;
+}
+code {
+	display: inline-block;
+	background-color: #eee;
+	padding: 0.5em;
+	font-size: 0.9em;
+	white-space: break-spaces;
 }
