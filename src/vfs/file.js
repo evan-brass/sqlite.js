@@ -23,10 +23,10 @@ function res_name(lock_name) {
 
 export class File {
 	#handle;
-	
+
 	flags;
 	sector_size = 0;
-	
+
 	#lock_name;
 	#lock;
 	#res_lock;
@@ -118,7 +118,7 @@ export class File {
 
 		// If the offset is dirty, then we need to sync the file before reading:
 		if (this.#dirty.has(offset)) await this.sync();
-		
+
 		this.#blob ??= await this.#handle.getFile();
 
 		const section = this.#blob.slice(offset, offset + len);

@@ -71,7 +71,7 @@ export class Http {
 		// Fetch the db.  Follow redirects, and determine if range queries are supported.
 		let resp = await fetch(url, {headers: {'Range': 'bytes=0-99'}, cache: 'reload', redirect: 'follow'});
 		check_err(resp);
-		
+
 		if (resp.status != 206) {
 			return new BlobFile(await resp.blob(), flags);
 		}

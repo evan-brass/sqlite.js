@@ -21,7 +21,7 @@ export class Local {
 	name = 'local';
 	max_pathname = 255;
 	#db;
-	constructor(idb_name = 'sql.mjs') {
+	constructor(idb_name = 'sqlite.js') {
 		this.#db = new Promise((res, rej) => {
 			on(indexedDB.open(idb_name, 1), {
 				upgradeneeded({ target: { result: db } }) {
