@@ -122,7 +122,7 @@
 				<p>Let's open a database of zipcodes and run a few queries on it:</p>
 				<ul>
 					<li>Attach the database
-						<pre><code>ATTACH 'file://cdn.jsdelivr.net/gh/alex-hofsteede/zipcode_db/zipcodes.sqlite?vfs=http' AS zipcodes</code></pre>
+						<pre><code>ATTACH 'file://raw.githubusercontent.com/alex-hofsteede/zipcode_db/master/zipcodes.sqlite?vfs=http' AS zipcodes;</code></pre>
 					</li>
 					<li>Find the city and state name for a given zip code
 <pre><code>SELECT zip, cities.name AS city, states.name AS state FROM zipcodes
