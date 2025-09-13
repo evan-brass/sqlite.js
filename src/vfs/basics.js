@@ -2,7 +2,9 @@
  * basics.js - Adds implementations for randomness, sleep, and current time.
  * You'll need this file if you want to use date or time sql functions,
  * random sql functions, or sqlite3_busy_timeout.
- * If you don't need these functions then you don't need to import this file.
+ * This file is currently mandatory, (though feel free to override the
+ * implementations here if you wish), but I would prefer it to be optional
+ * again in the future.
  */
 import { imports, mem8, memdv } from "../sqlite.js";
 import { SQLITE_OK } from "../dist/sqlite_def.js";

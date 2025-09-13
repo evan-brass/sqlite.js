@@ -7,6 +7,9 @@ import {
 import { Bindable, Pointer, value_to_js } from './value.js';
 import { borrow_mem, str_read, handle_error } from "./memory.js";
 
+// TEMPORARY: sqlite3_open_v2 is calling xRandomness sometimes (Even for :memory: which is the only vfs that I thought wouldn't require it).
+import './vfs/basics.js';
+
 export class OpenParams extends Pointer {
 	pathname = ":memory:";
 	flags = SQLITE_OPEN_URI | SQLITE_OPEN_CREATE | SQLITE_OPEN_EXRESCODE | SQLITE_OPEN_READWRITE
