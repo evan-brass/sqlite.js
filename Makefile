@@ -1,5 +1,9 @@
 # You'll need sed, wasi-sdk (in /opt/wasi-sdk), and binaryen (in /opt/binaryen)
-all: src/dist/sqlite3.async.wasm src/dist/sqlite_def.js
+all: src/dist/sqlite3.async.wasm src/dist/sqlite_def.js src/dist/.compilers
+
+src/dist/.compilers:
+	/opt/wasi-sdk/bin/wasm32-wasi-clang -v &> $@
+	/opt/binaryen/bin/wasm-opt --version >> $@
 
 src/dist/sqlite_def.js: vendor/sqlite3.h
 	sed -n -E 's/^#define ([A-Z][A-Z0-9_]+)( +)\(?(\(sqlite3_destructor_type\))?((-?0x[0-9A-F]+)|(-?[0-9]+)|("[^"]*")|([A-Z0-9_]+( +\| *\([0-9]+<<[0-9]+\))?))\)?/export const \1 =\2\4;/p' <$^ >$@

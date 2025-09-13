@@ -1,0 +1,40 @@
+sed 's/__wasi__/__pretend_not_wasi__/g' <vendor/sqlite3.c >c_src/sqlite3.c
+/opt/wasi-sdk/bin/wasm32-wasi-clang -v -O3 \
+		-Ic_src -Ivendor \
+		-D_HAVE_SQLITE_CONFIG_H \
+		-Wl,--export-dynamic,--export=malloc,--export=free,--export=realloc,--export=strlen \
+		-o src/dist/sqlite3.wasm \
+		c_src/main.c c_src/sqlite3.c
+clang version 20.1.8-wasi-sdk (https://github.com/llvm/llvm-project 87f0227cb60147a26a1eeb4fb06e3b505e9c7261)
+Target: wasm32-unknown-wasi
+Thread model: posix
+InstalledDir: /opt/wasi-sdk/bin
+Configuration file: /opt/wasi-sdk/bin/clang.cfg
+ "/opt/wasi-sdk/bin/clang-20" -cc1 -triple wasm32-unknown-wasi -emit-obj -dumpdir src/dist/sqlite3.wasm- -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name main.c -mrelocation-model static -mframe-pointer=none -ffp-contract=on -fno-rounding-math -mconstructor-aliases -target-cpu generic -fvisibility=hidden -debugger-tuning=gdb -fdebug-compilation-dir=/Users/evan/src/sqlite.js -target-linker-version 1053.12 -v -fcoverage-compilation-dir=/Users/evan/src/sqlite.js -resource-dir /opt/wasi-sdk/lib/clang/20 -I c_src -I vendor -D _HAVE_SQLITE_CONFIG_H -isysroot /opt/wasi-sdk/bin/../share/wasi-sysroot -internal-isystem /opt/wasi-sdk/lib/clang/20/include -internal-isystem /opt/wasi-sdk/bin/../share/wasi-sysroot/include/wasm32-wasi -internal-isystem /opt/wasi-sdk/bin/../share/wasi-sysroot/include -O3 -ferror-limit 19 -fgnuc-version=4.2.1 -fskip-odr-check-in-gmf -vectorize-loops -vectorize-slp -o /var/folders/fv/03rlfvnd6q362wn3m9vdzdn80000gn/T/main-bcca38.o -x c c_src/main.c
+clang -cc1 version 20.1.8-wasi-sdk based upon LLVM 20.1.8-wasi-sdk default target wasm32-wasi
+#include "..." search starts here:
+#include <...> search starts here:
+ c_src
+ vendor
+ /opt/wasi-sdk/lib/clang/20/include
+ /opt/wasi-sdk/bin/../share/wasi-sysroot/include/wasm32-wasi
+ /opt/wasi-sdk/bin/../share/wasi-sysroot/include
+End of search list.
+ "/opt/wasi-sdk/bin/clang-20" -cc1 -triple wasm32-unknown-wasi -emit-obj -dumpdir src/dist/sqlite3.wasm- -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name sqlite3.c -mrelocation-model static -mframe-pointer=none -ffp-contract=on -fno-rounding-math -mconstructor-aliases -target-cpu generic -fvisibility=hidden -debugger-tuning=gdb -fdebug-compilation-dir=/Users/evan/src/sqlite.js -target-linker-version 1053.12 -v -fcoverage-compilation-dir=/Users/evan/src/sqlite.js -resource-dir /opt/wasi-sdk/lib/clang/20 -I c_src -I vendor -D _HAVE_SQLITE_CONFIG_H -isysroot /opt/wasi-sdk/bin/../share/wasi-sysroot -internal-isystem /opt/wasi-sdk/lib/clang/20/include -internal-isystem /opt/wasi-sdk/bin/../share/wasi-sysroot/include/wasm32-wasi -internal-isystem /opt/wasi-sdk/bin/../share/wasi-sysroot/include -O3 -ferror-limit 19 -fgnuc-version=4.2.1 -fskip-odr-check-in-gmf -vectorize-loops -vectorize-slp -o /var/folders/fv/03rlfvnd6q362wn3m9vdzdn80000gn/T/sqlite3-c12455.o -x c c_src/sqlite3.c
+clang -cc1 version 20.1.8-wasi-sdk based upon LLVM 20.1.8-wasi-sdk default target wasm32-wasi
+#include "..." search starts here:
+#include <...> search starts here:
+ c_src
+ vendor
+ /opt/wasi-sdk/lib/clang/20/include
+ /opt/wasi-sdk/bin/../share/wasi-sysroot/include/wasm32-wasi
+ /opt/wasi-sdk/bin/../share/wasi-sysroot/include
+End of search list.
+ "/opt/wasi-sdk/bin/wasm-ld" -m wasm32 -L/opt/wasi-sdk/lib/clang/20/lib/wasm32-unknown-wasi -L/opt/wasi-sdk/bin/../share/wasi-sysroot/lib/wasm32-wasi /opt/wasi-sdk/bin/../share/wasi-sysroot/lib/wasm32-wasi/crt1-command.o --export-dynamic --export=malloc --export=free --export=realloc --export=strlen /var/folders/fv/03rlfvnd6q362wn3m9vdzdn80000gn/T/main-bcca38.o /var/folders/fv/03rlfvnd6q362wn3m9vdzdn80000gn/T/sqlite3-c12455.o -lc /opt/wasi-sdk/lib/clang/20/lib/wasm32-unknown-wasi/libclang_rt.builtins.a -o src/dist/sqlite3.wasm --keep-section=target_features
+ "/opt/binaryen/bin/wasm-opt" src/dist/sqlite3.wasm -O3 -o src/dist/sqlite3.wasm
+/opt/binaryen/bin/wasm-opt -O4 --asyncify \
+		-o src/dist/sqlite3.async.wasm \
+		src/dist/sqlite3.wasm
+sed -n -E 's/^#define ([A-Z][A-Z0-9_]+)( +)\(?(\(sqlite3_destructor_type\))?((-?0x[0-9A-F]+)|(-?[0-9]+)|("[^"]*")|([A-Z0-9_]+( +\| *\([0-9]+<<[0-9]+\))?))\)?/export const \1 =\2\4;/p' <vendor/sqlite3.h >src/dist/sqlite_def.js
+/opt/wasi-sdk/bin/wasm32-wasi-clang -v &> src/dist/.compilers
+/opt/binaryen/bin/wasm-opt --version >> src/dist/.compilers

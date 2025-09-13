@@ -1,0 +1,6 @@
+clang version 20.1.8-wasi-sdk (https://github.com/llvm/llvm-project 87f0227cb60147a26a1eeb4fb06e3b505e9c7261)
+Target: wasm32-unknown-wasi
+Thread model: posix
+InstalledDir: /opt/wasi-sdk/bin
+Configuration file: /opt/wasi-sdk/bin/clang.cfg
+wasm-opt version 124 (version_124)

@@ -8,7 +8,7 @@
 		"sqlite.js": "./src/index.js"
 	},
 	"tasks": {
-		"compile": "make -B",
+		"compile": "make -B &> src/dist/.build.output",
 		"test": "deno test --allow-read --allow-net"
 	},
 	"publish": {
